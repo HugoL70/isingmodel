@@ -1,2 +1,2 @@
 # isingmodel
-Procrastination.
+ising model
