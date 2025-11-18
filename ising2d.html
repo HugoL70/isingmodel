@@ -74,34 +74,12 @@ function update() {
     const x = Math.floor(Math.random()*GRID_W);
     const y = Math.floor(Math.random()*GRID_H);
 
-    /*const energy = -J * grid[y][x] * (
+    const energy = -J * grid[y][x] * (
       grid[(y-1+GRID_H)%GRID_H][x] +
       grid[(y+1)%GRID_H][x] +
       grid[y][(x-1+GRID_W)%GRID_W] +
       grid[y][(x+1)%GRID_W]
-    );*/
-
-    if (y == 0) {
-      const energy = -J * grid[y][x] * (
-      grid[(y-1+GRID_H)%GRID_H][(-x)%GRID_W] +
-      grid[(y+1)%GRID_H][x] +
-      grid[y][(x-1+GRID_W)%GRID_W] +
-      grid[y][(x+1)%GRID_W]);
-    }
-    if (y == GRID_H-1) {
-      const energy = -J * grid[y][x] * (
-      grid[(y-1+GRID_H)%GRID_H][(-x)%GRID_W] +
-      grid[(y+1)%GRID_H][(-x)%GRID_W] +
-      grid[y][(x-1+GRID_W)%GRID_W] +
-      grid[y][(x+1)%GRID_W]);
-    }
-    else {
-      const energy = -J * grid[y][x] * (
-      grid[(y-1+GRID_H)%GRID_H][x] +
-      grid[(y+1)%GRID_H][x] +
-      grid[y][(x-1+GRID_W)%GRID_W] +
-      grid[y][(x+1)%GRID_W]);
-    }
+    );
 
     const p = 1/(1 + Math.exp(2*beta*energy));
     if (Math.random() > p) {
