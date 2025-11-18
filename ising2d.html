@@ -6,8 +6,34 @@
 <style>
   body { background: #000; color: #fff; font-family: sans-serif; text-align: center; }
   canvas { border: 1px solid #333; display: block; margin: 0 auto; }
-  #controls { margin-top: 10px; }
-  button { font-size: 16px; margin-left: 10px; }
+
+  #controls {
+    margin-top: 10px;
+    width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: left;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .label {
+    width: 40px;   /* ensures labels align */
+    text-align: right;
+    margin-right: 10px;
+  }
+
+  button {
+    font-size: 16px;
+    min-width: 200px; /* wider buttons for text to fit */
+    padding: 4px 8px;
+  }
+
   input[type="text"] { width: 80px; font-size: 16px; }
   h2 { margin-bottom: 5px; }
 </style>
@@ -19,18 +45,39 @@
 <canvas id="gameCanvas" width="1200" height="750"></canvas>
 
 <div id="controls">
-  beta:
-  <input
-    type="range"
-    id="betaSlider"
-    min="0.01"
-    max="3.0"
-    step="0.0001"
-    value="0.1"
-    style="width: 600px;"
-  >
-  <input type="text" id="betaInput" value="0.1000">
-  <button id="topologyBtn">Switch to Torus</button>
+
+  <!-- Row 1: B-field slider + buttons -->
+  <div class="row">
+    <span class="label">B:</span>
+    <input
+      type="range"
+      id="BSlider"
+      min="-1"
+      max="1"
+      step="0.0001"
+      value="0"
+      style="width: 400px;"
+    >
+    <input type="text" id="BInput" value="0.0000">
+    <button id="topologyBtn">Switch to Torus</button>
+    <button id="flipJBtn">Flip J (J = +1)</button>
+  </div>
+
+  <!-- Row 2: beta slider -->
+  <div class="row">
+    <span class="label">beta:</span>
+    <input
+      type="range"
+      id="betaSlider"
+      min="0.01"
+      max="3.0"
+      step="0.0001"
+      value="0.1"
+      style="width: 600px;"
+    >
+    <input type="text" id="betaInput" value="0.1000">
+  </div>
+
 </div>
 
 <script>
@@ -43,28 +90,46 @@ const ctx = canvas.getContext('2d');
 // ---- Beta handling ----
 let beta = parseFloat(document.getElementById('betaSlider').value);
 const betaInput = document.getElementById('betaInput');
-
 betaInput.value = beta.toFixed(4);
 
-// Slider → input box
 document.getElementById('betaSlider').addEventListener('input', (e) => {
   beta = parseFloat(e.target.value);
   betaInput.value = beta.toFixed(4);
 });
 
-// Input box → slider
 betaInput.addEventListener('change', (e) => {
   let val = parseFloat(e.target.value);
   if (isNaN(val)) val = beta;
-  val = Math.max(0.01, Math.min(3.0, val)); // enforce range
+  val = Math.max(0.01, Math.min(3.0, val));
   beta = val;
   betaInput.value = beta.toFixed(4);
   document.getElementById('betaSlider').value = beta;
 });
 
+// ---- B-field handling ----
+let B = 0;
+const BSlider = document.getElementById("BSlider");
+const BInput  = document.getElementById("BInput");
+
+BInput.value = B.toFixed(4);
+
+BSlider.addEventListener('input', (e) => {
+  B = parseFloat(e.target.value);
+  BInput.value = B.toFixed(4);
+});
+
+BInput.addEventListener('change', (e) => {
+  let val = parseFloat(e.target.value);
+  if (isNaN(val)) val = B;
+  val = Math.max(-1, Math.min(1, val));
+  B = val;
+  BInput.value = B.toFixed(4);
+  BSlider.value = B;
+});
+
 const colours = [[250,80,50],[0,0,230]];
 
-// Initialize grid randomly
+// ---- Grid init ----
 let grid = [];
 for (let y=0; y<GRID_H; y++) {
   let row = [];
@@ -74,7 +139,7 @@ for (let y=0; y<GRID_H; y++) {
   grid.push(row);
 }
 
-// Mouse painting
+// Painting
 let leftDown = false;
 let rightDown = false;
 
@@ -105,68 +170,77 @@ const topologyHeading = document.getElementById('topologyHeading');
 
 topologyBtn.addEventListener('click', () => {
   isKlein = !isKlein;
-  topologyBtn.textContent = isKlein ? 'Switch to Torus' : 'Switch to Klein Bottle';
+  topologyBtn.textContent = isKlein ? 'Switch to Torus' : 'Switch to Klein bottle';
   topologyHeading.textContent = isKlein ? 'Current Topology: Klein Bottle' : 'Current Topology: Torus';
 });
 
-// Neighbor function
+// ---- J flipping ----
+let J = 1;
+const flipJBtn = document.getElementById('flipJBtn');
+
+flipJBtn.addEventListener('click', () => {
+  J = -J;
+  flipJBtn.textContent = `Flip J (J = ${J > 0 ? '+1' : '-1'})`;
+});
+
+// ---- Neighbor function ----
 function getNeighbor(y, x) {
   const xx = (x + GRID_W) % GRID_W;
 
   if (isKlein) {
-    // Klein bottle: vertical reflection, horizontal normal
     if (y < 0) return grid[GRID_H - 1][GRID_W - 1 - xx];
     if (y >= GRID_H) return grid[0][GRID_W - 1 - xx];
     return grid[y][xx];
   } else {
-    // Torus: full periodic
     const yy = (y + GRID_H) % GRID_H;
     return grid[yy][xx];
   }
 }
 
-// ---- Ising update ----
+// ---- Update ----
 function update() {
-  const J = 1;
-  const updates = Math.floor((GRID_W*GRID_H) / 5);
+  const updates = Math.floor((GRID_W * GRID_H) / 5);
 
-  for (let n=0; n<updates; n++) {
-    const x = Math.floor(Math.random()*GRID_W);
-    const y = Math.floor(Math.random()*GRID_H);
+  for (let n = 0; n < updates; n++) {
+    const x = Math.floor(Math.random() * GRID_W);
+    const y = Math.floor(Math.random() * GRID_H);
 
-    const energy = -J * grid[y][x] * (
-      getNeighbor(y-1, x) +
-      getNeighbor(y+1, x) +
-      grid[y][(x-1+GRID_W)%GRID_W] +
-      grid[y][(x+1)%GRID_W]
-    );
+    const s = grid[y][x];
 
-    const p = 1/(1 + Math.exp(2*beta*energy));
+    const neighborSum =
+      getNeighbor(y - 1, x) +
+      getNeighbor(y + 1, x) +
+      grid[y][(x - 1 + GRID_W) % GRID_W] +
+      grid[y][(x + 1) % GRID_W];
+
+    const energy = -J * s * neighborSum - B * s;
+
+    const p = 1 / (1 + Math.exp(2 * beta * energy));
     if (Math.random() > p) {
       grid[y][x] *= -1;
     }
   }
 }
 
-// ---- Drawing ----
+// ---- Draw ----
 function drawGrid() {
   const imageData = ctx.createImageData(canvas.width, canvas.height);
   const data = imageData.data;
 
-  for (let y=0; y<GRID_H; y++) {
-    for (let x=0; x<GRID_W; x++) {
-      const color = colours[(grid[y][x]+1)/2];
+  for (let y = 0; y < GRID_H; y++) {
+    for (let x = 0; x < GRID_W; x++) {
+      const color = colours[(grid[y][x] + 1) / 2];
 
-      for (let dy=0; dy<CELL_SIZE; dy++) {
-        for (let dx=0; dx<CELL_SIZE; dx++) {
-          const px = x*CELL_SIZE + dx;
-          const py = y*CELL_SIZE + dy;
-          const idx = 4*(py*canvas.width + px);
+      for (let dy = 0; dy < CELL_SIZE; dy++) {
+        for (let dx = 0; dx < CELL_SIZE; dx++) {
+          const px = x * CELL_SIZE + dx;
+          const py = y * CELL_SIZE + dy;
+          const idx = 4 * (py * canvas.width + px);
 
-          data[idx]   = color[0];
-          data[idx+1] = color[1];
-          data[idx+2] = color[2];
-          data[idx+3] = 255;
+          data[idx]     = color[0];
+          data[idx + 1] = color[1];
+          data[idx + 2] = color[2];
+          data[idx + 3] = 255;
         }
       }
     }
@@ -180,7 +254,7 @@ canvas.addEventListener('mousemove', (e) => {
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
 
-  if (my >= GRID_H*CELL_SIZE) return;
+  if (my >= GRID_H * CELL_SIZE) return;
 
   const gx = Math.floor(mx / CELL_SIZE);
   const gy = Math.floor(my / CELL_SIZE);
