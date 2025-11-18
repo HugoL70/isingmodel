@@ -23,24 +23,35 @@
   }
 
   .label {
-    width: 40px;   /* ensures labels align */
+    width: 40px;
     text-align: right;
     margin-right: 10px;
   }
 
   button {
     font-size: 16px;
-    min-width: 200px; /* wider buttons for text to fit */
+    min-width: 200px;
     padding: 4px 8px;
   }
 
   input[type="text"] { width: 80px; font-size: 16px; }
   h2 { margin-bottom: 5px; }
+
+  #modeToggleBtn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 14px;
+    padding: 4px 8px;
+    min-width: 180px;
+  }
 </style>
 </head>
 <body>
 
 <h2 id="topologyHeading">Current Topology: Klein Bottle</h2>
+
+<button id="modeToggleBtn">Switch to Small Grid</button>
 
 <canvas id="gameCanvas" width="1200" height="750"></canvas>
 
@@ -81,11 +92,47 @@
 </div>
 
 <script>
-const GRID_W = 400;
-const GRID_H = 250;
-const CELL_SIZE = 3;
+// ---- Grid parameters ----
+let mode = 2; // 1 = small, 2 = large
+let GRID_W = 600, GRID_H = 375, CELL_SIZE = 2;
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
+// ---- Mode toggle ----
+const modeToggleBtn = document.getElementById('modeToggleBtn');
+modeToggleBtn.addEventListener('click', () => {
+  if (mode === 1) {
+    // Switch to large
+    mode = 2;
+    GRID_W = 600; GRID_H = 375; CELL_SIZE = 2;
+    canvas.width = GRID_W * CELL_SIZE;
+    canvas.height = GRID_H * CELL_SIZE;
+    modeToggleBtn.textContent = "Switch to Small Grid";
+  } else {
+    // Switch to small
+    mode = 1;
+    GRID_W = 400; GRID_H = 250; CELL_SIZE = 3;
+    canvas.width = GRID_W * CELL_SIZE;
+    canvas.height = GRID_H * CELL_SIZE;
+    modeToggleBtn.textContent = "Switch to Large Grid";
+  }
+  initGrid();
+});
+
+// ---- Initialize grid ----
+let grid = [];
+function initGrid() {
+  grid = [];
+  for (let y=0; y<GRID_H; y++) {
+    let row = [];
+    for (let x=0; x<GRID_W; x++) {
+      row.push(Math.random() < 0.5 ? -1 : 1);
+    }
+    grid.push(row);
+  }
+}
+initGrid();
 
 // ---- Beta handling ----
 let beta = parseFloat(document.getElementById('betaSlider').value);
@@ -96,7 +143,6 @@ document.getElementById('betaSlider').addEventListener('input', (e) => {
   beta = parseFloat(e.target.value);
   betaInput.value = beta.toFixed(4);
 });
-
 betaInput.addEventListener('change', (e) => {
   let val = parseFloat(e.target.value);
   if (isNaN(val)) val = beta;
@@ -112,12 +158,7 @@ const BSlider = document.getElementById("BSlider");
 const BInput  = document.getElementById("BInput");
 
 BInput.value = B.toFixed(4);
-
-BSlider.addEventListener('input', (e) => {
-  B = parseFloat(e.target.value);
-  BInput.value = B.toFixed(4);
-});
-
+BSlider.addEventListener('input', (e) => { B = parseFloat(e.target.value); BInput.value = B.toFixed(4); });
 BInput.addEventListener('change', (e) => {
   let val = parseFloat(e.target.value);
   if (isNaN(val)) val = B;
@@ -129,36 +170,17 @@ BInput.addEventListener('change', (e) => {
 
 const colours = [[250,80,50],[0,0,230]];
 
-// ---- Grid init ----
-let grid = [];
-for (let y=0; y<GRID_H; y++) {
-  let row = [];
-  for (let x=0; x<GRID_W; x++) {
-    row.push(Math.random() < 0.5 ? -1 : 1);
-  }
-  grid.push(row);
-}
-
-// Painting
-let leftDown = false;
-let rightDown = false;
-
-canvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0) leftDown = true;
-  if (e.button === 2) rightDown = true;
-});
-canvas.addEventListener('mouseup', (e) => {
-  if (e.button === 0) leftDown = false;
-  if (e.button === 2) rightDown = false;
-});
-canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
+// ---- Painting ----
+let leftDown = false, rightDown = false;
+canvas.addEventListener('mousedown', (e) => { if (e.button===0) leftDown=true; if(e.button===2) rightDown=true; });
+canvas.addEventListener('mouseup', (e) => { if(e.button===0) leftDown=false; if(e.button===2) rightDown=false; });
+canvas.addEventListener('contextmenu', (e)=>e.preventDefault());
 function paintBlock(gx, gy, value) {
-  for (let dx=0; dx<4; dx++) {
-    for (let dy=0; dy<4; dy++) {
-      let x = (gx + dx + GRID_W) % GRID_W;
-      let y = (gy + dy + GRID_H) % GRID_H;
-      grid[y][x] = value;
+  for(let dx=0;dx<CELL_SIZE;dx++){
+    for(let dy=0;dy<CELL_SIZE;dy++){
+      let x = (gx+dx+GRID_W)%GRID_W;
+      let y = (gy+dy+GRID_H)%GRID_H;
+      grid[y][x]=value;
     }
   }
 }
@@ -167,108 +189,84 @@ function paintBlock(gx, gy, value) {
 let isKlein = true;
 const topologyBtn = document.getElementById('topologyBtn');
 const topologyHeading = document.getElementById('topologyHeading');
-
 topologyBtn.addEventListener('click', () => {
   isKlein = !isKlein;
-  topologyBtn.textContent = isKlein ? 'Switch to Torus' : 'Switch to Klein bottle';
-  topologyHeading.textContent = isKlein ? 'Current Topology: Klein Bottle' : 'Current Topology: Torus';
+  topologyBtn.textContent = isKlein?'Switch to Torus':'Switch to Klein bottle';
+  topologyHeading.textContent = isKlein?'Current Topology: Klein Bottle':'Current Topology: Torus';
 });
 
 // ---- J flipping ----
-let J = 1;
-const flipJBtn = document.getElementById('flipJBtn');
-
+let J=1;
+const flipJBtn=document.getElementById('flipJBtn');
 flipJBtn.addEventListener('click', () => {
-  J = -J;
-  flipJBtn.textContent = `Flip J (J = ${J > 0 ? '+1' : '-1'})`;
+  J=-J;
+  flipJBtn.textContent = `Flip J (J=${J>0?'+1':'-1'})`;
 });
 
 // ---- Neighbor function ----
-function getNeighbor(y, x) {
-  const xx = (x + GRID_W) % GRID_W;
-
-  if (isKlein) {
-    if (y < 0) return grid[GRID_H - 1][GRID_W - 1 - xx];
-    if (y >= GRID_H) return grid[0][GRID_W - 1 - xx];
+function getNeighbor(y,x){
+  const xx=(x+GRID_W)%GRID_W;
+  if(isKlein){
+    if(y<0) return grid[GRID_H-1][GRID_W-1-xx];
+    if(y>=GRID_H) return grid[0][GRID_W-1-xx];
     return grid[y][xx];
   } else {
-    const yy = (y + GRID_H) % GRID_H;
+    const yy=(y+GRID_H)%GRID_H;
     return grid[yy][xx];
   }
 }
 
 // ---- Update ----
-function update() {
-  const updates = Math.floor((GRID_W * GRID_H) / 5);
-
-  for (let n = 0; n < updates; n++) {
-    const x = Math.floor(Math.random() * GRID_W);
-    const y = Math.floor(Math.random() * GRID_H);
-
-    const s = grid[y][x];
-
-    const neighborSum =
-      getNeighbor(y - 1, x) +
-      getNeighbor(y + 1, x) +
-      grid[y][(x - 1 + GRID_W) % GRID_W] +
-      grid[y][(x + 1) % GRID_W];
-
-    const energy = -J * s * neighborSum - B * s;
-
-    const p = 1 / (1 + Math.exp(2 * beta * energy));
-    if (Math.random() > p) {
-      grid[y][x] *= -1;
-    }
+function update(){
+  const updates=Math.floor((GRID_W*GRID_H)/5);
+  for(let n=0;n<updates;n++){
+    const x=Math.floor(Math.random()*GRID_W);
+    const y=Math.floor(Math.random()*GRID_H);
+    const s=grid[y][x];
+    const neighborSum=getNeighbor(y-1,x)+getNeighbor(y+1,x)+grid[y][(x-1+GRID_W)%GRID_W]+grid[y][(x+1)%GRID_W];
+    const energy=-J*s*neighborSum-B*s;
+    const p=1/(1+Math.exp(2*beta*energy));
+    if(Math.random()>p) grid[y][x]*=-1;
   }
 }
 
 // ---- Draw ----
-function drawGrid() {
-  const imageData = ctx.createImageData(canvas.width, canvas.height);
-  const data = imageData.data;
-
-  for (let y = 0; y < GRID_H; y++) {
-    for (let x = 0; x < GRID_W; x++) {
-      const color = colours[(grid[y][x] + 1) / 2];
-
-      for (let dy = 0; dy < CELL_SIZE; dy++) {
-        for (let dx = 0; dx < CELL_SIZE; dx++) {
-          const px = x * CELL_SIZE + dx;
-          const py = y * CELL_SIZE + dy;
-          const idx = 4 * (py * canvas.width + px);
-
-          data[idx]     = color[0];
-          data[idx + 1] = color[1];
-          data[idx + 2] = color[2];
-          data[idx + 3] = 255;
+function drawGrid(){
+  const imageData=ctx.createImageData(canvas.width,canvas.height);
+  const data=imageData.data;
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      const color=colours[(grid[y][x]+1)/2];
+      for(let dy=0;dy<CELL_SIZE;dy++){
+        for(let dx=0;dx<CELL_SIZE;dx++){
+          const px=x*CELL_SIZE+dx;
+          const py=y*CELL_SIZE+dy;
+          const idx=4*(py*canvas.width+px);
+          data[idx]=color[0];
+          data[idx+1]=color[1];
+          data[idx+2]=color[2];
+          data[idx+3]=255;
         }
       }
     }
   }
-  ctx.putImageData(imageData, 0, 0);
+  ctx.putImageData(imageData,0,0);
 }
 
 // ---- Painting ----
-canvas.addEventListener('mousemove', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-
-  if (my >= GRID_H * CELL_SIZE) return;
-
-  const gx = Math.floor(mx / CELL_SIZE);
-  const gy = Math.floor(my / CELL_SIZE);
-
-  if (leftDown) paintBlock(gx, gy, -1);
-  if (rightDown) paintBlock(gx, gy, 1);
+canvas.addEventListener('mousemove',(e)=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left;
+  const my=e.clientY-rect.top;
+  if(my>=GRID_H*CELL_SIZE) return;
+  const gx=Math.floor(mx/CELL_SIZE);
+  const gy=Math.floor(my/CELL_SIZE);
+  if(leftDown) paintBlock(gx,gy,-1);
+  if(rightDown) paintBlock(gx,gy,1);
 });
 
 // ---- Main loop ----
-function loop() {
-  update();
-  drawGrid();
-  requestAnimationFrame(loop);
-}
+function loop(){ update(); drawGrid(); requestAnimationFrame(loop); }
 loop();
 </script>
 
