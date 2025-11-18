@@ -34,7 +34,6 @@ document.getElementById('betaSlider').addEventListener('input', (e) => {
 
 const colours = [[250,80,50],[0,0,230]];
 
-// Initialize grid randomly
 let grid = [];
 for (let y=0; y<GRID_H; y++) {
   let row = [];
@@ -44,7 +43,6 @@ for (let y=0; y<GRID_H; y++) {
   grid.push(row);
 }
 
-// Mouse painting
 let leftDown = false;
 let rightDown = false;
 
@@ -68,7 +66,6 @@ function paintBlock(gx, gy, value) {
   }
 }
 
-// Main update
 function update() {
   const J = 1;
   const upnum = Math.floor((GRID_W*GRID_H)/5);
@@ -91,7 +88,6 @@ function update() {
   }
 }
 
-// Draw grid
 function drawGrid() {
   const imageData = ctx.createImageData(canvas.width, canvas.height);
   const data = imageData.data;
@@ -114,7 +110,6 @@ function drawGrid() {
   ctx.putImageData(imageData, 0, 0);
 }
 
-// Handle mouse painting
 canvas.addEventListener('mousemove', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
@@ -126,7 +121,6 @@ canvas.addEventListener('mousemove', (e) => {
   if (rightDown) paintBlock(gx, gy, 1);
 });
 
-// Main loop
 function loop() {
   update();
   drawGrid();
