@@ -11,7 +11,7 @@
 </head>
 <body>
 
-<canvas id="gameCanvas" width="1200" height="900"></canvas>
+<canvas id="gameCanvas" width="1200" height="750"></canvas>
 <div id="sliderContainer">
   beta: <input type="range" id="betaSlider" min="0.01" max="5.0" step="0.01" value="0.1">
   <span id="betaValue">0.10</span>
@@ -19,7 +19,7 @@
 
 <script>
 const GRID_W = 400;
-const GRID_H = 300;
+const GRID_H = 250;
 const CELL_SIZE = 3;
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
