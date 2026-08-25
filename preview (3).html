@@ -1,0 +1,5834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Emitter Thermal Radiation Simulation</title>
+<style>
+    :root {
+        color-scheme: dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        background: #111;
+        color: #eee;
+        display: flex;
+        justify-content: center;
+    }
+
+    .wrap {
+        width: min(1180px, 97vw);
+        padding: 18px;
+    }
+
+    h1 {
+        font-size: 1.25rem;
+        margin: 0 0 6px;
+        font-weight: 650;
+    }
+
+    .subtitle {
+        color: #aaa;
+        font-size: 0.88rem;
+        margin-bottom: 14px;
+        line-height: 1.4;
+    }
+
+    .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 310px;
+        gap: 16px;
+        align-items: start;
+    }
+
+    canvas {
+        width: 100%;
+        display: block;
+        border: 1px solid #444;
+    }
+
+    #display {
+        aspect-ratio: 1 / 1;
+        background: white;
+    }
+
+    .visuals {
+        min-width: 0;
+    }
+
+    .screen-image-block {
+        margin-top: 12px;
+    }
+
+    .screen-image-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: #ccc;
+        font-size: 0.82rem;
+        margin: 0 2px 5px;
+    }
+
+    #screenImage {
+        height: 82px;
+        background: #090909;
+    }
+
+    #intensityImage {
+        height: 82px;
+        background: #090909;
+    }
+
+    .correlation-block {
+        margin-top: 12px;
+    }
+
+    .correlation-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: #ccc;
+        font-size: 0.82rem;
+        margin: 0 2px 5px;
+    }
+
+    #correlationPlot {
+        height: 190px;
+        background: #fff;
+    }
+
+    .panel {
+        background: #1b1b1b;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 14px;
+    }
+
+    .control {
+        margin-bottom: 13px;
+    }
+
+    label {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.9rem;
+        margin-bottom: 5px;
+    }
+
+    input[type="range"] {
+        width: 100%;
+    }
+
+    button {
+        appearance: none;
+        border: 1px solid #555;
+        background: #2b2b2b;
+        color: white;
+        border-radius: 7px;
+        padding: 9px 12px;
+        cursor: pointer;
+        margin-right: 6px;
+        margin-bottom: 8px;
+    }
+
+    button:hover { background: #353535; }
+
+    .stats {
+        font-size: 0.83rem;
+        line-height: 1.55;
+        color: #ccc;
+        margin-top: 10px;
+    }
+
+    .note {
+        font-size: 0.77rem;
+        color: #aaa;
+        line-height: 1.45;
+        margin-top: 12px;
+    }
+
+    @media (max-width: 820px) {
+        .layout { grid-template-columns: 1fr; }
+    }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+    <h1>Independent Thermal Emitters → Finite Absorbing Screen</h1>
+
+    <div class="subtitle">
+        Choose 1–10 independent emitters. They are evenly spaced on the left source plane.
+        Only rays whose straight-line trajectories intersect the finite absorbing screen are simulated.
+    </div>
+
+    <div class="layout">
+        <div class="visuals">
+            <canvas id="display" width="840" height="840"></canvas>
+
+            <div class="screen-image-block">
+                <div class="screen-image-title">
+                    <span>Colours sampled directly at the absorbing screen</span>
+                    <span>bottom → top</span>
+                </div>
+                <canvas id="screenImage" width="840" height="82"></canvas>
+            </div>
+
+            <div class="screen-image-block">
+                <div class="screen-image-title">
+                    <span>Intensity |E|² sampled directly at the absorbing screen</span>
+                    <span>grayscale, bottom → top</span>
+                </div>
+                <canvas id="intensityImage" width="840" height="82"></canvas>
+            </div>
+
+            <div class="correlation-block">
+                <div class="correlation-title">
+                    <span>Spatial correlation of intensity fluctuations</span>
+                    <span>normalized fluctuation correlation C(Δy)</span>
+                </div>
+                <canvas id="correlationPlot" width="840" height="190"></canvas>
+            </div>
+        </div>
+
+        <div class="panel">
+
+            <div class="control">
+                <label>
+                    <span>Number of emitters</span>
+                    <span id="countValue"></span>
+                </label>
+                <input id="emitterCount" type="range" min="1" max="10" value="2" step="1">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Spatial coherence</span>
+                    <span id="coherenceValue"></span>
+                </label>
+                <input id="coherentMode" type="checkbox">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Temporal coherence</span>
+                    <span id="temporalCoherenceValue"></span>
+                </label>
+                <input id="temporalCoherentMode" type="checkbox">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Screen distance R</span>
+                    <span id="rValue"></span>
+                </label>
+                <input id="screenDistance" type="range" min="4" max="17.5" value="14" step="0.1">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Screen height</span>
+                    <span id="screenHeightValue"></span>
+                </label>
+                <input id="screenHeight" type="range" min="2" max="18" value="10" step="0.25">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Source array height</span>
+                    <span id="sourceHeightValue"></span>
+                </label>
+                <input id="sourceArrayHeight" type="range" min="0" max="18" value="8" step="0.25">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Detector array height</span>
+                    <span id="detectorHeightValue"></span>
+                </label>
+                <input id="detectorArrayHeight" type="range" min="0" max="10" value="1" step="0.05">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Temperature</span>
+                    <span id="tempValue"></span>
+                </label>
+                <input id="temperature" type="range" min="800" max="12000" value="5800" step="100">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Emission rate / emitter (packet mode)</span>
+                    <span id="rateValue"></span>
+                </label>
+                <input id="rate" type="range" min="1" max="45" value="18" step="1">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Packet width (packet mode)</span>
+                    <span id="widthValue"></span>
+                </label>
+                <input id="packetWidth" type="range" min="0.2" max="1.5" value="0.65" step="0.05">
+            </div>
+
+            <div class="control">
+                <label>
+                    <span>Field colour scale</span>
+                    <span id="scaleValue"></span>
+                </label>
+                <input id="fieldScale" type="range" min="0.5" max="10" value="4" step="0.1">
+            </div>
+
+            <button id="pause">Pause</button>
+            <button id="reset">Reset</button>
+
+            <div class="stats" id="stats"></div>
+
+            <div class="note">
+                <b>Spatial coherence</b> controls whether different emitters share the same radiation history.
+                <b>Temporal coherence</b> controls whether that radiation is a continuous sine wave
+                or the existing random thermal packet stream.<br><br>
+
+                Spatial OFF + Temporal OFF = fully incoherent packet streams.<br>
+                Spatial ON + Temporal OFF = shared random packet stream.<br>
+                Spatial OFF + Temporal ON = independent continuous sine waves.<br>
+                Spatial ON + Temporal ON = the same continuous sine wave from every source.<br><br>
+
+                The displayed field is
+                <b>E<sub>total</sub> = Σ E<sub>i</sub></b>
+                at every retained simulation pixel.<br><br>
+
+                Red = positive field, blue = negative field, white = zero in the main field plot.
+                The thin strip below is not a separate detector model: it simply samples the
+                colours immediately on the absorbing screen and redraws them with a small height.
+                The black detector dots show one central detector and five equally spaced detectors on each side.<br><br>
+
+                For the correlation calculation, intensity is <b>I = E²</b>. The plotted quantity is
+                the cumulative, time-weighted
+                <b>normalized fluctuation correlation C(Δy)</b>
+                from the start of the current measurement.
+                Nothing is propagated past the screen.<br><br>
+                Performance optimizations preserve the same simulation grid and physics:
+                the full 2D field is rendered in parallel with WebGL2 on the GPU,
+                while the CPU evaluates only the screen strip and detector points needed
+                for the statistics. A CPU fallback is retained for browsers without WebGL2.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+"use strict";
+
+// ============================================================
+// PHYSICAL CONSTANTS
+// ============================================================
+
+const H = 6.62607015e-34;
+const C_REAL = 299792458;
+const K_B = 1.380649e-23;
+
+
+// ============================================================
+// WORLD / PERFORMANCE SETTINGS
+// ============================================================
+
+const SIM_W = 280;
+const SIM_H = 280;
+
+const X_MIN = -10;
+const X_MAX = 10;
+const Y_MIN = -10;
+const Y_MAX = 10;
+
+// All emitters live on this vertical source plane.
+const SOURCE_X = -8.5;
+
+// Source and detector array heights are independent controls.
+// Keep the source array comfortably inside the simulation world.
+const MAX_SOURCE_ARRAY_HEIGHT =
+    (Y_MAX - Y_MIN) - 2;
+
+const WAVE_SPEED = 4.0;
+const MAX_DT = 0.05;
+
+const DECAY_STRENGTH = 0.08;
+const MAX_PACKETS_PER_SOURCE = 110;
+const ENVELOPE_CUTOFF_SIGMA = 3.5;
+
+// Number of samples along the screen strip.
+const SCREEN_SAMPLES = 420;
+
+
+// ============================================================
+// CANVAS
+// ============================================================
+
+const displayCanvas =
+    document.getElementById("display");
+
+const displayCtx =
+    displayCanvas.getContext(
+        "2d",
+        { alpha: false }
+    );
+
+const simCanvas =
+    document.createElement("canvas");
+
+simCanvas.width = SIM_W;
+simCanvas.height = SIM_H;
+
+const simCtx =
+    simCanvas.getContext(
+        "2d",
+        { alpha: false }
+    );
+
+const imageData =
+    simCtx.createImageData(
+        SIM_W,
+        SIM_H
+    );
+
+const pixels =
+    imageData.data;
+
+displayCtx.imageSmoothingEnabled = true;
+displayCtx.imageSmoothingQuality = "high";
+
+const screenCanvas =
+    document.getElementById("screenImage");
+
+const screenCtx =
+    screenCanvas.getContext(
+        "2d",
+        { alpha: false }
+    );
+
+const intensityCanvas =
+    document.getElementById("intensityImage");
+
+const intensityCtx =
+    intensityCanvas.getContext(
+        "2d",
+        { alpha: false }
+    );
+
+const correlationCanvas =
+    document.getElementById("correlationPlot");
+
+const correlationCtx =
+    correlationCanvas.getContext(
+        "2d",
+        { alpha: false }
+    );
+
+// Cached static geometry overlay. It is rebuilt only when source/screen
+// geometry changes, then composited as one image each animation frame.
+const overlayCanvas =
+    document.createElement("canvas");
+
+overlayCanvas.width =
+    displayCanvas.width;
+
+overlayCanvas.height =
+    displayCanvas.height;
+
+const overlayCtx =
+    overlayCanvas.getContext(
+        "2d",
+        { alpha: true }
+    );
+
+// The screen strip is rendered as a 1-pixel-high ImageData row and
+// stretched vertically in a single drawImage call.
+const screenStripCanvas =
+    document.createElement("canvas");
+
+screenStripCanvas.width =
+    SCREEN_SAMPLES;
+
+screenStripCanvas.height = 1;
+
+const screenStripCtx =
+    screenStripCanvas.getContext(
+        "2d",
+        { alpha: false }
+    );
+
+const screenStripImageData =
+    screenStripCtx.createImageData(
+        SCREEN_SAMPLES,
+        1
+    );
+
+const screenStripPixels =
+    screenStripImageData.data;
+
+const intensityStripCanvas =
+    document.createElement("canvas");
+
+intensityStripCanvas.width =
+    SCREEN_SAMPLES;
+
+intensityStripCanvas.height = 1;
+
+const intensityStripCtx =
+    intensityStripCanvas.getContext(
+        "2d",
+        { alpha: false }
+    );
+
+const intensityStripImageData =
+    intensityStripCtx.createImageData(
+        SCREEN_SAMPLES,
+        1
+    );
+
+const intensityStripPixels =
+    intensityStripImageData.data;
+
+// Reused intensity samples along the screen and an adaptive
+// display scale so the grayscale strip stays readable.
+const screenIntensitySamples =
+    new Float32Array(
+        SCREEN_SAMPLES
+    );
+
+let intensityDisplayScale = 1;
+
+
+// ============================================================
+// GPU FIELD RENDERER
+// ============================================================
+
+const gpuCanvas =
+    document.createElement("canvas");
+
+gpuCanvas.width = SIM_W;
+gpuCanvas.height = SIM_H;
+
+const gl =
+    gpuCanvas.getContext(
+        "webgl2",
+        {
+            alpha: false,
+            antialias: false,
+            depth: false,
+            stencil: false,
+            preserveDrawingBuffer: false,
+            powerPreference: "high-performance"
+        }
+    );
+
+let gpuAvailable =
+    Boolean(gl);
+
+const GPU_MAX_SOURCES = 10;
+const GPU_MAX_PACKETS =
+    MAX_PACKETS_PER_SOURCE;
+
+let gpuProgram = null;
+let gpuSourceTexture = null;
+let gpuPacketTexture = null;
+let gpuWaveTexture = null;
+
+const gpuSourceData =
+    new Float32Array(
+        GPU_MAX_SOURCES * 4
+    );
+
+const gpuPacketData =
+    new Float32Array(
+        GPU_MAX_SOURCES *
+        GPU_MAX_PACKETS *
+        4
+    );
+
+const gpuWaveData =
+    new Float32Array(
+        GPU_MAX_SOURCES * 4
+    );
+
+let gpuUniforms = null;
+
+
+function compileGPUShader(
+    type,
+    source
+) {
+    const shader =
+        gl.createShader(type);
+
+    gl.shaderSource(
+        shader,
+        source
+    );
+
+    gl.compileShader(
+        shader
+    );
+
+    if (
+        !gl.getShaderParameter(
+            shader,
+            gl.COMPILE_STATUS
+        )
+    ) {
+        const message =
+            gl.getShaderInfoLog(
+                shader
+            );
+
+        gl.deleteShader(
+            shader
+        );
+
+        throw new Error(
+            message
+        );
+    }
+
+    return shader;
+}
+
+
+function createGPUDataTexture(
+    width,
+    height
+) {
+    const texture =
+        gl.createTexture();
+
+    gl.bindTexture(
+        gl.TEXTURE_2D,
+        texture
+    );
+
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MIN_FILTER,
+        gl.NEAREST
+    );
+
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MAG_FILTER,
+        gl.NEAREST
+    );
+
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_S,
+        gl.CLAMP_TO_EDGE
+    );
+
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_T,
+        gl.CLAMP_TO_EDGE
+    );
+
+    gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA32F,
+        width,
+        height,
+        0,
+        gl.RGBA,
+        gl.FLOAT,
+        null
+    );
+
+    return texture;
+}
+
+
+function initializeGPUFieldRenderer() {
+
+    if (!gl) {
+        gpuAvailable = false;
+        return;
+    }
+
+    const vertexSource = `#version 300 es
+        precision highp float;
+
+        void main() {
+            vec2 p;
+
+            if (gl_VertexID == 0) {
+                p = vec2(-1.0, -1.0);
+            } else if (gl_VertexID == 1) {
+                p = vec2(3.0, -1.0);
+            } else {
+                p = vec2(-1.0, 3.0);
+            }
+
+            gl_Position =
+                vec4(p, 0.0, 1.0);
+        }
+    `;
+
+    const fragmentSource = `#version 300 es
+        precision highp float;
+        precision highp int;
+
+        out vec4 outColor;
+
+        uniform sampler2D uSources;
+        uniform sampler2D uPackets;
+        uniform sampler2D uWaves;
+
+        uniform int uSourceCount;
+        uniform bool uTemporalCoherent;
+
+        uniform float uScreenX;
+        uniform float uScreenHeight;
+        uniform float uPacketWidth;
+        uniform float uFieldScale;
+
+        const int MAX_SOURCES = 10;
+        const int MAX_PACKETS = 110;
+
+        const float X_MIN = -10.0;
+        const float X_MAX = 10.0;
+        const float Y_MIN = -10.0;
+        const float Y_MAX = 10.0;
+
+        const float SIM_W_MINUS_ONE = 279.0;
+        const float SIM_H_MINUS_ONE = 279.0;
+
+        const float DECAY = 0.08;
+        const float ENVELOPE_CUTOFF = 3.5;
+
+        void main() {
+
+            float gx =
+                gl_FragCoord.x -
+                0.5;
+
+            float gy =
+                gl_FragCoord.y -
+                0.5;
+
+            float x =
+                X_MIN +
+                gx /
+                SIM_W_MINUS_ONE *
+                (X_MAX - X_MIN);
+
+            float y =
+                Y_MIN +
+                gy /
+                SIM_H_MINUS_ONE *
+                (Y_MAX - Y_MIN);
+
+            vec2 field =
+                vec2(0.0);
+
+            for (
+                int s = 0;
+                s < MAX_SOURCES;
+                s++
+            ) {
+
+                if (s >= uSourceCount) {
+                    break;
+                }
+
+                vec4 source =
+                    texelFetch(
+                        uSources,
+                        ivec2(s, 0),
+                        0
+                    );
+
+                float sx = source.x;
+                float sy = source.y;
+                int packetCount =
+                    int(source.z + 0.5);
+
+                float dx =
+                    x - sx;
+
+                if (
+                    dx <= 0.0 ||
+                    x >= uScreenX
+                ) {
+                    continue;
+                }
+
+                float dy =
+                    y - sy;
+
+                float sourceToScreen =
+                    uScreenX - sx;
+
+                float yHit =
+                    sy +
+                    dy *
+                    sourceToScreen /
+                    dx;
+
+                float halfScreen =
+                    0.5 *
+                    uScreenHeight;
+
+                if (
+                    yHit < -halfScreen ||
+                    yHit > halfScreen
+                ) {
+                    continue;
+                }
+
+                float r =
+                    sqrt(
+                        dx * dx +
+                        dy * dy
+                    );
+
+                float decay =
+                    exp(
+                        -DECAY *
+                        r
+                    ) /
+                    sqrt(
+                        1.0 +
+                        max(
+                            r,
+                            0.15
+                        )
+                    );
+
+                if (uTemporalCoherent) {
+
+                    vec4 wave =
+                        texelFetch(
+                            uWaves,
+                            ivec2(s, 0),
+                            0
+                        );
+
+                    float k =
+                        wave.x;
+
+                    float phase =
+                        wave.y;
+
+                    float amplitude =
+                        wave.z;
+
+                    float theta =
+                        k * r +
+                        phase;
+
+                    float magnitude =
+                        amplitude *
+                        decay;
+
+                    field +=
+                        magnitude *
+                        vec2(
+                            cos(theta),
+                            sin(theta)
+                        );
+
+                } else {
+
+                    float cutoff =
+                        uPacketWidth *
+                        ENVELOPE_CUTOFF;
+
+                    float inverseWidth =
+                        1.0 /
+                        max(
+                            uPacketWidth,
+                            0.000001
+                        );
+
+                    for (
+                        int p = 0;
+                        p < MAX_PACKETS;
+                        p++
+                    ) {
+
+                        if (
+                            p >= packetCount
+                        ) {
+                            break;
+                        }
+
+                        vec4 packet =
+                            texelFetch(
+                                uPackets,
+                                ivec2(p, s),
+                                0
+                            );
+
+                        float radialOffset =
+                            r -
+                            packet.x;
+
+                        if (
+                            radialOffset < -cutoff ||
+                            radialOffset > cutoff
+                        ) {
+                            continue;
+                        }
+
+                        float z =
+                            radialOffset *
+                            inverseWidth;
+
+                        float envelope =
+                            exp(
+                                -0.5 *
+                                z *
+                                z
+                            );
+
+                        float theta =
+                            packet.y *
+                            radialOffset +
+                            packet.z;
+
+                        float magnitude =
+                            packet.w *
+                            envelope *
+                            decay;
+
+                        field +=
+                            magnitude *
+                            vec2(
+                                cos(theta),
+                                sin(theta)
+                            );
+                    }
+                }
+            }
+
+            float t =
+                clamp(
+                    field.x /
+                    max(
+                        uFieldScale,
+                        0.000001
+                    ),
+                    -1.0,
+                    1.0
+                );
+
+            vec3 colour;
+
+            if (t >= 0.0) {
+                float q =
+                    1.0 - t;
+
+                colour =
+                    vec3(
+                        1.0,
+                        q,
+                        q
+                    );
+
+            } else {
+                float q =
+                    1.0 + t;
+
+                colour =
+                    vec3(
+                        q,
+                        q,
+                        1.0
+                    );
+            }
+
+            outColor =
+                vec4(
+                    colour,
+                    1.0
+                );
+        }
+    `;
+
+    try {
+
+        const vs =
+            compileGPUShader(
+                gl.VERTEX_SHADER,
+                vertexSource
+            );
+
+        const fs =
+            compileGPUShader(
+                gl.FRAGMENT_SHADER,
+                fragmentSource
+            );
+
+        gpuProgram =
+            gl.createProgram();
+
+        gl.attachShader(
+            gpuProgram,
+            vs
+        );
+
+        gl.attachShader(
+            gpuProgram,
+            fs
+        );
+
+        gl.linkProgram(
+            gpuProgram
+        );
+
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+
+        if (
+            !gl.getProgramParameter(
+                gpuProgram,
+                gl.LINK_STATUS
+            )
+        ) {
+            throw new Error(
+                gl.getProgramInfoLog(
+                    gpuProgram
+                )
+            );
+        }
+
+        const vao =
+            gl.createVertexArray();
+
+        gl.bindVertexArray(
+            vao
+        );
+
+        gpuSourceTexture =
+            createGPUDataTexture(
+                GPU_MAX_SOURCES,
+                1
+            );
+
+        gpuPacketTexture =
+            createGPUDataTexture(
+                GPU_MAX_PACKETS,
+                GPU_MAX_SOURCES
+            );
+
+        gpuWaveTexture =
+            createGPUDataTexture(
+                GPU_MAX_SOURCES,
+                1
+            );
+
+        gpuUniforms = {
+            sourceCount:
+                gl.getUniformLocation(
+                    gpuProgram,
+                    "uSourceCount"
+                ),
+
+            temporalCoherent:
+                gl.getUniformLocation(
+                    gpuProgram,
+                    "uTemporalCoherent"
+                ),
+
+            screenX:
+                gl.getUniformLocation(
+                    gpuProgram,
+                    "uScreenX"
+                ),
+
+            screenHeight:
+                gl.getUniformLocation(
+                    gpuProgram,
+                    "uScreenHeight"
+                ),
+
+            packetWidth:
+                gl.getUniformLocation(
+                    gpuProgram,
+                    "uPacketWidth"
+                ),
+
+            fieldScale:
+                gl.getUniformLocation(
+                    gpuProgram,
+                    "uFieldScale"
+                )
+        };
+
+        gl.useProgram(
+            gpuProgram
+        );
+
+        gl.uniform1i(
+            gl.getUniformLocation(
+                gpuProgram,
+                "uSources"
+            ),
+            0
+        );
+
+        gl.uniform1i(
+            gl.getUniformLocation(
+                gpuProgram,
+                "uPackets"
+            ),
+            1
+        );
+
+        gl.uniform1i(
+            gl.getUniformLocation(
+                gpuProgram,
+                "uWaves"
+            ),
+            2
+        );
+
+        gl.disable(
+            gl.BLEND
+        );
+
+        gl.disable(
+            gl.DEPTH_TEST
+        );
+
+        gl.viewport(
+            0,
+            0,
+            SIM_W,
+            SIM_H
+        );
+
+        gpuAvailable = true;
+
+    } catch (error) {
+
+        console.error(
+            "GPU renderer unavailable:",
+            error
+        );
+
+        gpuAvailable = false;
+    }
+}
+
+
+function updateGPUFieldData(
+    currentTime
+) {
+
+    gpuSourceData.fill(0);
+    gpuPacketData.fill(0);
+    gpuWaveData.fill(0);
+
+    const sourceCount =
+        Math.min(
+            emitters.length,
+            GPU_MAX_SOURCES
+        );
+
+    const twoPi =
+        2 *
+        Math.PI;
+
+    for (
+        let s = 0;
+        s < sourceCount;
+        s++
+    ) {
+
+        const source =
+            emitters[s];
+
+        const sourceOffset =
+            4 * s;
+
+        gpuSourceData[
+            sourceOffset
+        ] =
+            source.x;
+
+        gpuSourceData[
+            sourceOffset + 1
+        ] =
+            source.y;
+
+
+        if (temporalCoherentMode) {
+
+            const wave =
+                getContinuousWaveForSource(
+                    source
+                );
+
+            if (wave) {
+
+                let temporalPhase =
+                    wave.phase -
+                    wave.k *
+                    WAVE_SPEED *
+                    currentTime;
+
+                temporalPhase %=
+                    twoPi;
+
+                gpuWaveData[
+                    sourceOffset
+                ] =
+                    wave.k;
+
+                gpuWaveData[
+                    sourceOffset + 1
+                ] =
+                    temporalPhase;
+
+                gpuWaveData[
+                    sourceOffset + 2
+                ] =
+                    wave.amplitude;
+            }
+
+            gpuSourceData[
+                sourceOffset + 2
+            ] = 0;
+
+        } else {
+
+            const packets =
+                getPacketsForSource(
+                    source
+                );
+
+            const count =
+                Math.min(
+                    packets.length,
+                    GPU_MAX_PACKETS
+                );
+
+            gpuSourceData[
+                sourceOffset + 2
+            ] =
+                count;
+
+            for (
+                let p = 0;
+                p < count;
+                p++
+            ) {
+
+                const packet =
+                    packets[p];
+
+                const age =
+                    currentTime -
+                    packet.birth;
+
+                const packetOffset =
+                    4 *
+                    (
+                        s *
+                        GPU_MAX_PACKETS +
+                        p
+                    );
+
+                gpuPacketData[
+                    packetOffset
+                ] =
+                    WAVE_SPEED *
+                    Math.max(
+                        age,
+                        0
+                    );
+
+                gpuPacketData[
+                    packetOffset + 1
+                ] =
+                    packet.k;
+
+                gpuPacketData[
+                    packetOffset + 2
+                ] =
+                    packet.phase;
+
+                gpuPacketData[
+                    packetOffset + 3
+                ] =
+                    packet.amplitude;
+            }
+        }
+    }
+
+
+    gl.activeTexture(
+        gl.TEXTURE0
+    );
+
+    gl.bindTexture(
+        gl.TEXTURE_2D,
+        gpuSourceTexture
+    );
+
+    gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        GPU_MAX_SOURCES,
+        1,
+        gl.RGBA,
+        gl.FLOAT,
+        gpuSourceData
+    );
+
+
+    gl.activeTexture(
+        gl.TEXTURE1
+    );
+
+    gl.bindTexture(
+        gl.TEXTURE_2D,
+        gpuPacketTexture
+    );
+
+    gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        GPU_MAX_PACKETS,
+        GPU_MAX_SOURCES,
+        gl.RGBA,
+        gl.FLOAT,
+        gpuPacketData
+    );
+
+
+    gl.activeTexture(
+        gl.TEXTURE2
+    );
+
+    gl.bindTexture(
+        gl.TEXTURE_2D,
+        gpuWaveTexture
+    );
+
+    gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        GPU_MAX_SOURCES,
+        1,
+        gl.RGBA,
+        gl.FLOAT,
+        gpuWaveData
+    );
+}
+
+
+function renderGPUField(
+    currentTime,
+    fieldScale,
+    packetWidth
+) {
+
+    if (!gpuAvailable) {
+        return false;
+    }
+
+    updateGPUFieldData(
+        currentTime
+    );
+
+    gl.useProgram(
+        gpuProgram
+    );
+
+    gl.uniform1i(
+        gpuUniforms.sourceCount,
+        Math.min(
+            emitters.length,
+            GPU_MAX_SOURCES
+        )
+    );
+
+    gl.uniform1i(
+        gpuUniforms.temporalCoherent,
+        temporalCoherentMode
+        ? 1
+        : 0
+    );
+
+    gl.uniform1f(
+        gpuUniforms.screenX,
+        screenX
+    );
+
+    gl.uniform1f(
+        gpuUniforms.screenHeight,
+        screenHeight
+    );
+
+    gl.uniform1f(
+        gpuUniforms.packetWidth,
+        packetWidth
+    );
+
+    gl.uniform1f(
+        gpuUniforms.fieldScale,
+        fieldScale
+    );
+
+    gl.drawArrays(
+        gl.TRIANGLES,
+        0,
+        3
+    );
+
+    return true;
+}
+
+
+initializeGPUFieldRenderer();
+
+
+// ============================================================
+// UI
+// ============================================================
+
+const ui = {
+    emitterCount: document.getElementById("emitterCount"),
+    coherentMode: document.getElementById("coherentMode"),
+    temporalCoherentMode: document.getElementById("temporalCoherentMode"),
+    screenDistance: document.getElementById("screenDistance"),
+    screenHeight: document.getElementById("screenHeight"),
+    sourceArrayHeight: document.getElementById("sourceArrayHeight"),
+    detectorArrayHeight: document.getElementById("detectorArrayHeight"),
+    temperature: document.getElementById("temperature"),
+    rate: document.getElementById("rate"),
+    packetWidth: document.getElementById("packetWidth"),
+    fieldScale: document.getElementById("fieldScale"),
+
+    countValue: document.getElementById("countValue"),
+    coherenceValue: document.getElementById("coherenceValue"),
+    temporalCoherenceValue: document.getElementById("temporalCoherenceValue"),
+    rValue: document.getElementById("rValue"),
+    screenHeightValue: document.getElementById("screenHeightValue"),
+    sourceHeightValue: document.getElementById("sourceHeightValue"),
+    detectorHeightValue: document.getElementById("detectorHeightValue"),
+    tempValue: document.getElementById("tempValue"),
+    rateValue: document.getElementById("rateValue"),
+    widthValue: document.getElementById("widthValue"),
+    scaleValue: document.getElementById("scaleValue"),
+
+    pause: document.getElementById("pause"),
+    reset: document.getElementById("reset"),
+    stats: document.getElementById("stats")
+};
+
+
+// ============================================================
+// RANDOM HELPERS
+// ============================================================
+
+function randomRayleigh(scale = 0.7) {
+    const u =
+        Math.max(
+            Math.random(),
+            1e-12
+        );
+
+    return scale *
+        Math.sqrt(
+            -2 * Math.log(u)
+        );
+}
+
+
+function randomPoisson(lambda) {
+    if (lambda <= 0) return 0;
+
+    const L =
+        Math.exp(-lambda);
+
+    let k = 0;
+    let p = 1;
+
+    do {
+        k++;
+        p *= Math.random();
+    } while (p > L);
+
+    return k - 1;
+}
+
+
+// ============================================================
+// BLACKBODY DISTRIBUTION
+// ============================================================
+
+const LAMBDA_MIN = 100e-9;
+const LAMBDA_MAX = 3000e-9;
+const SPECTRUM_SAMPLES = 2500;
+
+const wavelengthTable =
+    new Float64Array(
+        SPECTRUM_SAMPLES
+    );
+
+for (
+    let i = 0;
+    i < SPECTRUM_SAMPLES;
+    i++
+) {
+    wavelengthTable[i] =
+        LAMBDA_MIN +
+        (
+            LAMBDA_MAX -
+            LAMBDA_MIN
+        ) *
+        i /
+        (
+            SPECTRUM_SAMPLES -
+            1
+        );
+}
+
+
+function planckSpectrum(
+    lambda,
+    temperature
+) {
+    const x =
+        H * C_REAL /
+        (
+            lambda *
+            K_B *
+            temperature
+        );
+
+    const denom =
+        Math.expm1(x);
+
+    if (
+        !Number.isFinite(denom) ||
+        denom <= 0
+    ) {
+        return 0;
+    }
+
+    return (
+        2 *
+        H *
+        C_REAL *
+        C_REAL
+    ) /
+    (
+        Math.pow(lambda, 5) *
+        denom
+    );
+}
+
+
+function makeBlackbodyCDF(
+    temperature
+) {
+    const cdf =
+        new Float64Array(
+            SPECTRUM_SAMPLES
+        );
+
+    let sum = 0;
+
+    for (
+        let i = 0;
+        i < SPECTRUM_SAMPLES;
+        i++
+    ) {
+        const value =
+            planckSpectrum(
+                wavelengthTable[i],
+                temperature
+            );
+
+        sum +=
+            Number.isFinite(value)
+            ? value
+            : 0;
+
+        cdf[i] = sum;
+    }
+
+    if (!(sum > 0)) {
+        for (
+            let i = 0;
+            i < cdf.length;
+            i++
+        ) {
+            cdf[i] =
+                (i + 1) /
+                cdf.length;
+        }
+
+        return cdf;
+    }
+
+    for (
+        let i = 0;
+        i < cdf.length;
+        i++
+    ) {
+        cdf[i] /= sum;
+    }
+
+    return cdf;
+}
+
+
+function sampleFromCDF(cdf) {
+    const u =
+        Math.random();
+
+    let lo = 0;
+    let hi =
+        cdf.length - 1;
+
+    while (lo < hi) {
+        const mid =
+            (lo + hi) >> 1;
+
+        if (cdf[mid] < u) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    return wavelengthTable[lo];
+}
+
+
+function physicalToSimulationWavelength(
+    lambda
+) {
+    const wavelengthNm =
+        lambda * 1e9;
+
+    const physicalMin = 100;
+    const physicalMax = 3000;
+
+    const simMin = 0.25;
+    const simMax = 1.8;
+
+    let fraction =
+        Math.log(
+            wavelengthNm /
+            physicalMin
+        ) /
+        Math.log(
+            physicalMax /
+            physicalMin
+        );
+
+    fraction =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                fraction
+            )
+        );
+
+    return (
+        simMin +
+        fraction *
+        (
+            simMax -
+            simMin
+        )
+    );
+}
+
+
+// ============================================================
+// PHYSICAL WAVELENGTH -> APPROXIMATE VISIBLE RGB
+// ============================================================
+
+function wavelengthNmToRGB(wavelengthNm) {
+
+    // Outside the human-visible band, contribute no visible colour.
+    if (
+        wavelengthNm < 380 ||
+        wavelengthNm > 780
+    ) {
+        return [0, 0, 0];
+    }
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+
+    if (wavelengthNm < 440) {
+        r = -(wavelengthNm - 440) / (440 - 380);
+        b = 1;
+    } else if (wavelengthNm < 490) {
+        g = (wavelengthNm - 440) / (490 - 440);
+        b = 1;
+    } else if (wavelengthNm < 510) {
+        g = 1;
+        b = -(wavelengthNm - 510) / (510 - 490);
+    } else if (wavelengthNm < 580) {
+        r = (wavelengthNm - 510) / (580 - 510);
+        g = 1;
+    } else if (wavelengthNm < 645) {
+        r = 1;
+        g = -(wavelengthNm - 645) / (645 - 580);
+    } else {
+        r = 1;
+    }
+
+    // Human visual sensitivity falls near the ends of the spectrum.
+    let factor = 1;
+
+    if (wavelengthNm < 420) {
+        factor =
+            0.3 +
+            0.7 *
+            (wavelengthNm - 380) /
+            (420 - 380);
+    } else if (wavelengthNm > 700) {
+        factor =
+            0.3 +
+            0.7 *
+            (780 - wavelengthNm) /
+            (780 - 700);
+    }
+
+    // Gamma-like correction for display.
+    const gamma = 0.8;
+
+    function channel(c) {
+        if (c <= 0) return 0;
+        return Math.pow(c * factor, gamma);
+    }
+
+    return [
+        channel(r),
+        channel(g),
+        channel(b)
+    ];
+}
+
+
+// ============================================================
+// GRID
+// ============================================================
+
+const gridX =
+    new Float32Array(
+        SIM_W * SIM_H
+    );
+
+const gridY =
+    new Float32Array(
+        SIM_W * SIM_H
+    );
+
+for (
+    let py = 0;
+    py < SIM_H;
+    py++
+) {
+    const y =
+        Y_MAX -
+        (
+            Y_MAX -
+            Y_MIN
+        ) *
+        py /
+        (
+            SIM_H - 1
+        );
+
+    for (
+        let px = 0;
+        px < SIM_W;
+        px++
+    ) {
+        const x =
+            X_MIN +
+            (
+                X_MAX -
+                X_MIN
+            ) *
+            px /
+            (
+                SIM_W - 1
+            );
+
+        const i =
+            py * SIM_W + px;
+
+        gridX[i] = x;
+        gridY[i] = y;
+    }
+}
+
+
+// ============================================================
+// GLOBAL SCREEN / SOURCE STATE
+// ============================================================
+
+let screenDistance = 14;
+let screenHeight = 10;
+
+let sourceArrayHeight = 8;
+let detectorArrayHeight = 1;
+
+let screenX =
+    SOURCE_X +
+    screenDistance;
+
+const SCREEN_CENTER_Y = 0;
+
+let emitters = [];
+
+let currentTemperature = 5800;
+
+// When coherentMode is true, every emitter uses exactly the same
+// random packet stream. The light is still temporally random,
+// but it is no longer independent between sources.
+let coherentMode = false;
+let temporalCoherentMode = false;
+
+let sharedPackets = [];
+
+// Continuous-wave state used when temporal coherence is enabled.
+// If spatial coherence is also enabled, every source uses the same
+// sharedContinuousWave object.
+let sharedContinuousWave = null;
+
+
+// ============================================================
+// THERMAL SOURCE CLASS
+// ============================================================
+
+function createPacketFromCDF(
+    cdf,
+    currentTime
+) {
+    const physicalWavelength =
+        sampleFromCDF(
+            cdf
+        );
+
+    const wavelength =
+        physicalToSimulationWavelength(
+            physicalWavelength
+        );
+
+    return {
+        birth: currentTime,
+
+        physicalWavelengthNm:
+            physicalWavelength * 1e9,
+
+        k:
+            2 *
+            Math.PI /
+            wavelength,
+
+        phase:
+            Math.random() *
+            2 *
+            Math.PI,
+
+        amplitude:
+            randomRayleigh(
+                0.7
+            )
+    };
+}
+
+
+function createContinuousWaveFromCDF(
+    cdf
+) {
+    const physicalWavelength =
+        sampleFromCDF(
+            cdf
+        );
+
+    const wavelength =
+        physicalToSimulationWavelength(
+            physicalWavelength
+        );
+
+    return {
+        physicalWavelengthNm:
+            physicalWavelength * 1e9,
+
+        k:
+            2 *
+            Math.PI /
+            wavelength,
+
+        phase:
+            Math.random() *
+            2 *
+            Math.PI,
+
+        amplitude:
+            0.9
+    };
+}
+
+function getContinuousWaveForSource(
+    source
+) {
+    return coherentMode
+        ? sharedContinuousWave
+        : source.continuousWave;
+}
+
+function rebuildContinuousWaves() {
+
+    if (
+        emitters.length === 0
+    ) {
+        sharedContinuousWave = null;
+        return;
+    }
+
+    if (coherentMode) {
+
+        sharedContinuousWave =
+            createContinuousWaveFromCDF(
+                emitters[0].cdf
+            );
+
+        for (
+            const source of emitters
+        ) {
+            source.continuousWave =
+                sharedContinuousWave;
+        }
+
+    } else {
+
+        sharedContinuousWave = null;
+
+        for (
+            const source of emitters
+        ) {
+            source.continuousWave =
+                createContinuousWaveFromCDF(
+                    source.cdf
+                );
+        }
+    }
+
+    rebuildContinuousSpatialCaches();
+}
+
+function getPacketsForSource(
+    source
+) {
+    return coherentMode
+        ? sharedPackets
+        : source.packets;
+}
+
+function emitSharedPackets(
+    cdf,
+    emissionRate,
+    currentTime,
+    dt
+) {
+    const count =
+        randomPoisson(
+            emissionRate * dt
+        );
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+        sharedPackets.push(
+            createPacketFromCDF(
+                cdf,
+                currentTime
+            )
+        );
+    }
+
+    if (
+        sharedPackets.length >
+        MAX_PACKETS_PER_SOURCE
+    ) {
+        sharedPackets.splice(
+            0,
+            sharedPackets.length -
+            MAX_PACKETS_PER_SOURCE
+        );
+    }
+}
+
+function removeOldSharedPackets(
+    currentTime,
+    packetWidth
+) {
+    let maxAge = 0;
+
+    for (
+        const source of emitters
+    ) {
+        const halfScreen =
+            screenHeight / 2;
+
+        const dx =
+            screenX -
+            source.x;
+
+        const dyTop =
+            (
+                SCREEN_CENTER_Y +
+                halfScreen
+            ) -
+            source.y;
+
+        const dyBottom =
+            (
+                SCREEN_CENTER_Y -
+                halfScreen
+            ) -
+            source.y;
+
+        const maxScreenDistance =
+            Math.max(
+                Math.sqrt(
+                    dx * dx +
+                    dyTop * dyTop
+                ),
+                Math.sqrt(
+                    dx * dx +
+                    dyBottom * dyBottom
+                )
+            );
+
+        maxAge = Math.max(
+            maxAge,
+            (
+                maxScreenDistance +
+                4 * packetWidth
+            ) /
+            WAVE_SPEED
+        );
+    }
+
+    let write = 0;
+
+    for (
+        let read = 0;
+        read < sharedPackets.length;
+        read++
+    ) {
+        const packet =
+            sharedPackets[read];
+
+        if (
+            currentTime -
+            packet.birth <
+            maxAge
+        ) {
+            sharedPackets[write++] =
+                packet;
+        }
+    }
+
+    sharedPackets.length = write;
+}
+
+class ThermalSource {
+
+    constructor(
+        x,
+        y,
+        temperature,
+        cdf
+    ) {
+        this.x = x;
+        this.y = y;
+
+        this.temperature =
+            temperature;
+
+        this.emissionRate = 18;
+
+        this.packets = [];
+
+        this.continuousWave = null;
+
+        // Precomputed spatial complex field for temporally coherent mode.
+        // These arrays correspond one-to-one with activeIndices.
+        this.continuousBaseReal =
+            new Float32Array(0);
+
+        this.continuousBaseImag =
+            new Float32Array(0);
+
+        this.continuousOmega = 0;
+
+        // Sources with the same temperature can share
+        // one blackbody CDF.
+        this.cdf = cdf;
+
+        this.activeIndices =
+            new Int32Array(0);
+
+        this.activeDistance =
+            new Float32Array(0);
+
+        this.activeDecay =
+            new Float32Array(0);
+
+        this.updateGeometry();
+    }
+
+
+    setCDF(
+        temperature,
+        cdf
+    ) {
+        this.temperature =
+            temperature;
+
+        this.cdf = cdf;
+    }
+
+
+    updateGeometry() {
+
+        const indices = [];
+        const distances = [];
+        const decays = [];
+
+        const halfScreen =
+            screenHeight / 2;
+
+        const sourceToScreen =
+            screenX - this.x;
+
+        if (
+            sourceToScreen <= 0
+        ) {
+            this.activeIndices =
+                new Int32Array(0);
+
+            this.activeDistance =
+                new Float32Array(0);
+
+            this.activeDecay =
+                new Float32Array(0);
+
+            this.continuousBaseReal =
+                new Float32Array(0);
+
+            this.continuousBaseImag =
+                new Float32Array(0);
+
+            return;
+        }
+
+
+        for (
+            let i = 0;
+            i < gridX.length;
+            i++
+        ) {
+
+            const x =
+                gridX[i];
+
+            const dx =
+                x - this.x;
+
+            if (
+                dx <= 0 ||
+                x >= screenX
+            ) {
+                continue;
+            }
+
+            const dy =
+                gridY[i] -
+                this.y;
+
+            const yHit =
+                this.y +
+                dy *
+                (
+                    sourceToScreen /
+                    dx
+                );
+
+            if (
+                yHit <
+                SCREEN_CENTER_Y -
+                halfScreen ||
+
+                yHit >
+                SCREEN_CENTER_Y +
+                halfScreen
+            ) {
+                continue;
+            }
+
+            const r =
+                Math.sqrt(
+                    dx * dx +
+                    dy * dy
+                );
+
+            indices.push(i);
+            distances.push(r);
+
+            decays.push(
+                Math.exp(
+                    -DECAY_STRENGTH *
+                    r
+                ) /
+                Math.sqrt(
+                    1 +
+                    Math.max(
+                        r,
+                        0.15
+                    )
+                )
+            );
+        }
+
+
+        /*
+            Sort the retained pixels by source distance once.
+
+            Thermal packets occupy only a thin annulus in r, so a packet
+            can then binary-search directly to the affected interval rather
+            than scanning every geometrically allowed pixel.
+        */
+
+        const order =
+            new Array(
+                distances.length
+            );
+
+        for (
+            let i = 0;
+            i < order.length;
+            i++
+        ) {
+            order[i] = i;
+        }
+
+        order.sort(
+            (a, b) =>
+                distances[a] -
+                distances[b]
+        );
+
+        const sortedIndices =
+            new Int32Array(
+                order.length
+            );
+
+        const sortedDistances =
+            new Float32Array(
+                order.length
+            );
+
+        const sortedDecays =
+            new Float32Array(
+                order.length
+            );
+
+        for (
+            let j = 0;
+            j < order.length;
+            j++
+        ) {
+            const oldIndex =
+                order[j];
+
+            sortedIndices[j] =
+                indices[oldIndex];
+
+            sortedDistances[j] =
+                distances[oldIndex];
+
+            sortedDecays[j] =
+                decays[oldIndex];
+        }
+
+        this.activeIndices =
+            sortedIndices;
+
+        this.activeDistance =
+            sortedDistances;
+
+        this.activeDecay =
+            sortedDecays;
+
+        // Geometry changed, so any old coherent spatial cache is invalid.
+        this.continuousBaseReal =
+            new Float32Array(
+                sortedIndices.length
+            );
+
+        this.continuousBaseImag =
+            new Float32Array(
+                sortedIndices.length
+            );
+    }
+
+
+    emit(
+        currentTime
+    ) {
+        this.packets.push(
+            createPacketFromCDF(
+                this.cdf,
+                currentTime
+            )
+        );
+
+        if (
+            this.packets.length >
+            MAX_PACKETS_PER_SOURCE
+        ) {
+            this.packets.shift();
+        }
+    }
+
+
+    updateEmission(
+        currentTime,
+        dt
+    ) {
+        const count =
+            randomPoisson(
+                this.emissionRate *
+                dt
+            );
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        ) {
+            this.emit(
+                currentTime
+            );
+        }
+    }
+
+
+    removeOldPackets(
+        currentTime,
+        packetWidth
+    ) {
+
+        const halfScreen =
+            screenHeight / 2;
+
+        const dx =
+            screenX -
+            this.x;
+
+        const dyTop =
+            (
+                SCREEN_CENTER_Y +
+                halfScreen
+            ) -
+            this.y;
+
+        const dyBottom =
+            (
+                SCREEN_CENTER_Y -
+                halfScreen
+            ) -
+            this.y;
+
+        const maxScreenDistance =
+            Math.max(
+                Math.sqrt(
+                    dx * dx +
+                    dyTop * dyTop
+                ),
+
+                Math.sqrt(
+                    dx * dx +
+                    dyBottom * dyBottom
+                )
+            );
+
+        const maxAge =
+            (
+                maxScreenDistance +
+                4 * packetWidth
+            ) /
+            WAVE_SPEED;
+
+
+        let write = 0;
+
+        for (
+            let read = 0;
+            read < this.packets.length;
+            read++
+        ) {
+
+            const packet =
+                this.packets[read];
+
+            if (
+                currentTime -
+                packet.birth <
+                maxAge
+            ) {
+                this.packets[write++] =
+                    packet;
+            }
+        }
+
+        this.packets.length =
+            write;
+    }
+
+
+    clear() {
+        this.packets.length = 0;
+    }
+}
+
+
+// ============================================================
+// EMITTER ARRAY MANAGEMENT
+// ============================================================
+
+function rebuildEmitters(
+    preservePackets = false
+) {
+    const count =
+        Math.max(
+            1,
+            Math.min(
+                10,
+                Math.round(
+                    Number(
+                        ui.emitterCount.value
+                    )
+                )
+            )
+        );
+
+    const temperature =
+        Number(
+            ui.temperature.value
+        );
+
+    currentTemperature =
+        temperature;
+
+    // All emitters use the same requested temperature,
+    // so compute the Planck CDF only once.
+    const sharedCDF =
+        makeBlackbodyCDF(
+            temperature
+        );
+
+    const sourceSpan =
+        Math.max(
+            0,
+            Math.min(
+                sourceArrayHeight,
+                MAX_SOURCE_ARRAY_HEIGHT
+            )
+        );
+
+    const oldEmitters =
+        emitters;
+
+    const next =
+        [];
+
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        let y = 0;
+
+        if (count > 1) {
+            y =
+                -sourceSpan / 2 +
+                sourceSpan *
+                i /
+                (
+                    count - 1
+                );
+        }
+
+
+        const source =
+            new ThermalSource(
+                SOURCE_X,
+                y,
+                temperature,
+                sharedCDF
+            );
+
+
+        source.emissionRate =
+            Number(
+                ui.rate.value
+            );
+
+
+        /*
+            When only a non-count geometry setting changes,
+            keep packet histories where possible.
+
+            If emitter count changes, the physical emitter
+            locations generally change, so a clean rebuild
+            is preferable.
+        */
+
+        if (
+            preservePackets &&
+            oldEmitters[i] &&
+            oldEmitters.length === count
+        ) {
+            source.packets =
+                oldEmitters[i].packets;
+        }
+
+        next.push(
+            source
+        );
+    }
+
+    emitters =
+        next;
+
+    rebuildContinuousWaves();
+    rebuildGeometryOverlay();
+}
+
+
+// ============================================================
+// PRECOMPUTED RADIAL / CONTINUOUS-WAVE HELPERS
+// ============================================================
+
+function lowerBoundFloat32(
+    array,
+    value
+) {
+    let lo = 0;
+    let hi = array.length;
+
+    while (lo < hi) {
+        const mid =
+            (lo + hi) >> 1;
+
+        if (
+            array[mid] <
+            value
+        ) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    return lo;
+}
+
+function upperBoundFloat32(
+    array,
+    value
+) {
+    let lo = 0;
+    let hi = array.length;
+
+    while (lo < hi) {
+        const mid =
+            (lo + hi) >> 1;
+
+        if (
+            array[mid] <=
+            value
+        ) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    return lo;
+}
+
+
+// Combined spatial field used when the sources are both spatially
+// and temporally coherent. In that case every source shares omega,
+// so their static spatial phasors can be summed once.
+const combinedContinuousBaseReal =
+    new Float32Array(
+        SIM_W * SIM_H
+    );
+
+const combinedContinuousBaseImag =
+    new Float32Array(
+        SIM_W * SIM_H
+    );
+
+let combinedContinuousIndices =
+    new Int32Array(0);
+
+let combinedContinuousOmega = 0;
+
+
+function updateContinuousSpatialCache(
+    source
+) {
+    const waveState =
+        getContinuousWaveForSource(
+            source
+        );
+
+    const n =
+        source.activeIndices.length;
+
+    if (!waveState || n === 0) {
+        source.continuousBaseReal =
+            new Float32Array(n);
+
+        source.continuousBaseImag =
+            new Float32Array(n);
+
+        source.continuousOmega = 0;
+        return;
+    }
+
+    if (
+        source.continuousBaseReal.length !==
+        n
+    ) {
+        source.continuousBaseReal =
+            new Float32Array(n);
+
+        source.continuousBaseImag =
+            new Float32Array(n);
+    }
+
+    const k =
+        waveState.k;
+
+    const phase =
+        waveState.phase;
+
+    const amplitude =
+        waveState.amplitude;
+
+    const distances =
+        source.activeDistance;
+
+    const decays =
+        source.activeDecay;
+
+    source.continuousOmega =
+        k *
+        WAVE_SPEED;
+
+    for (
+        let j = 0;
+        j < n;
+        j++
+    ) {
+        const theta =
+            k *
+            distances[j] +
+            phase;
+
+        const magnitude =
+            amplitude *
+            decays[j];
+
+        source.continuousBaseReal[j] =
+            magnitude *
+            Math.cos(
+                theta
+            );
+
+        source.continuousBaseImag[j] =
+            magnitude *
+            Math.sin(
+                theta
+            );
+    }
+}
+
+
+function rebuildContinuousSpatialCaches() {
+
+    for (
+        const source of emitters
+    ) {
+        updateContinuousSpatialCache(
+            source
+        );
+    }
+
+    combinedContinuousBaseReal.fill(0);
+    combinedContinuousBaseImag.fill(0);
+    combinedContinuousOmega = 0;
+
+    if (
+        !coherentMode ||
+        emitters.length === 0 ||
+        !sharedContinuousWave
+    ) {
+        combinedContinuousIndices =
+            new Int32Array(0);
+
+        return;
+    }
+
+    const touched =
+        new Uint8Array(
+            SIM_W * SIM_H
+        );
+
+    const touchedIndices = [];
+
+    for (
+        const source of emitters
+    ) {
+        const indices =
+            source.activeIndices;
+
+        const baseReal =
+            source.continuousBaseReal;
+
+        const baseImag =
+            source.continuousBaseImag;
+
+        for (
+            let j = 0;
+            j < indices.length;
+            j++
+        ) {
+            const index =
+                indices[j];
+
+            if (!touched[index]) {
+                touched[index] = 1;
+                touchedIndices.push(index);
+            }
+
+            combinedContinuousBaseReal[index] +=
+                baseReal[j];
+
+            combinedContinuousBaseImag[index] +=
+                baseImag[j];
+        }
+    }
+
+    combinedContinuousIndices =
+        Int32Array.from(
+            touchedIndices
+        );
+
+    combinedContinuousOmega =
+        sharedContinuousWave.k *
+        WAVE_SPEED;
+}
+
+
+// ============================================================
+// FIELD
+// ============================================================
+
+const totalFieldReal =
+    new Float32Array(
+        SIM_W * SIM_H
+    );
+
+const totalFieldImag =
+    new Float32Array(
+        SIM_W * SIM_H
+    );
+
+function clearTotalField() {
+    totalFieldReal.fill(0);
+    totalFieldImag.fill(0);
+}
+
+
+function accumulateEmitterField(
+    source,
+    outputReal,
+    outputImag,
+    currentTime,
+    packetWidth
+) {
+
+    const packets =
+        getPacketsForSource(
+            source
+        );
+
+    const indices =
+        source.activeIndices;
+
+    const distances =
+        source.activeDistance;
+
+    const decays =
+        source.activeDecay;
+
+    const cutoff =
+        packetWidth *
+        ENVELOPE_CUTOFF_SIGMA;
+
+    const inverseWidth =
+        1 /
+        packetWidth;
+
+
+    /*
+        Complex Gaussian wave packet:
+
+            E(r,t) = A envelope exp[i(k(r-vt) + phi)]
+
+        The visualization uses Re(E), while intensity calculations
+        later use |E|^2 after summing every complex contribution.
+    */
+
+    for (
+        let p = 0;
+        p < packets.length;
+        p++
+    ) {
+
+        const packet =
+            packets[p];
+
+        const age =
+            currentTime -
+            packet.birth;
+
+        if (age < 0) continue;
+
+        const packetRadius =
+            WAVE_SPEED *
+            age;
+
+        const k =
+            packet.k;
+
+        const phase0 =
+            packet.phase;
+
+        const amplitude =
+            packet.amplitude;
+
+
+        const startIndex =
+            lowerBoundFloat32(
+                distances,
+                packetRadius -
+                cutoff
+            );
+
+        const endIndex =
+            upperBoundFloat32(
+                distances,
+                packetRadius +
+                cutoff
+            );
+
+        for (
+            let j = startIndex;
+            j < endIndex;
+            j++
+        ) {
+
+            const radialOffset =
+                distances[j] -
+                packetRadius;
+
+            const z =
+                radialOffset *
+                inverseWidth;
+
+            const envelope =
+                Math.exp(
+                    -0.5 *
+                    z *
+                    z
+                );
+
+            const theta =
+                k *
+                radialOffset +
+                phase0;
+
+            const magnitude =
+                amplitude *
+                envelope *
+                decays[j];
+
+            const index =
+                indices[j];
+
+            outputReal[index] +=
+                magnitude *
+                Math.cos(
+                    theta
+                );
+
+            outputImag[index] +=
+                magnitude *
+                Math.sin(
+                    theta
+                );
+        }
+    }
+}
+
+
+function accumulateContinuousEmitterField(
+    source,
+    outputReal,
+    outputImag,
+    currentTime
+) {
+
+    const indices =
+        source.activeIndices;
+
+    const baseReal =
+        source.continuousBaseReal;
+
+    const baseImag =
+        source.continuousBaseImag;
+
+    const omega =
+        source.continuousOmega;
+
+    if (
+        indices.length === 0 ||
+        omega === 0
+    ) {
+        return;
+    }
+
+    // exp(-i omega t): only two trig calls for the whole source.
+    const c =
+        Math.cos(
+            omega *
+            currentTime
+        );
+
+    const s =
+        Math.sin(
+            omega *
+            currentTime
+        );
+
+    for (
+        let j = 0;
+        j < indices.length;
+        j++
+    ) {
+        const a =
+            baseReal[j];
+
+        const b =
+            baseImag[j];
+
+        const index =
+            indices[j];
+
+        outputReal[index] +=
+            a * c +
+            b * s;
+
+        outputImag[index] +=
+            b * c -
+            a * s;
+    }
+}
+
+
+function accumulateCombinedContinuousField(
+    outputReal,
+    outputImag,
+    currentTime
+) {
+    if (
+        combinedContinuousIndices.length === 0 ||
+        combinedContinuousOmega === 0
+    ) {
+        return;
+    }
+
+    const c =
+        Math.cos(
+            combinedContinuousOmega *
+            currentTime
+        );
+
+    const s =
+        Math.sin(
+            combinedContinuousOmega *
+            currentTime
+        );
+
+    for (
+        let j = 0;
+        j < combinedContinuousIndices.length;
+        j++
+    ) {
+        const index =
+            combinedContinuousIndices[j];
+
+        const a =
+            combinedContinuousBaseReal[index];
+
+        const b =
+            combinedContinuousBaseImag[index];
+
+        outputReal[index] =
+            a * c +
+            b * s;
+
+        outputImag[index] =
+            b * c -
+            a * s;
+    }
+}
+
+function calculateTotalField(
+    currentTime,
+    packetWidth
+) {
+
+    clearTotalField();
+
+    if (
+        temporalCoherentMode &&
+        coherentMode
+    ) {
+        accumulateCombinedContinuousField(
+            totalFieldReal,
+            totalFieldImag,
+            currentTime
+        );
+
+        return;
+    }
+
+    for (
+        let i = 0;
+        i < emitters.length;
+        i++
+    ) {
+
+        if (temporalCoherentMode) {
+
+            accumulateContinuousEmitterField(
+                emitters[i],
+                totalFieldReal,
+                totalFieldImag,
+                currentTime
+            );
+
+        } else {
+
+            accumulateEmitterField(
+                emitters[i],
+                totalFieldReal,
+                totalFieldImag,
+                currentTime,
+                packetWidth
+            );
+        }
+    }
+}
+
+
+// ============================================================
+// SPATIAL CORRELATION OF INTENSITY FLUCTUATIONS
+// ============================================================
+
+const DETECTOR_SIDE_COUNT = 5;
+const DETECTOR_COUNT =
+    2 * DETECTOR_SIDE_COUNT + 1;
+
+// Detector array height is stored with the global geometry state.
+
+// Cumulative time-weighted measurement state.
+let correlationTime = 0;
+
+// Per-detector first and second moments.
+let integralI =
+    new Float64Array(
+        DETECTOR_COUNT
+    );
+
+let integralI2 =
+    new Float64Array(
+        DETECTOR_COUNT
+    );
+
+// Pair moments: integral of I_i I_j dt, stored in row-major form.
+let integralPair =
+    new Float64Array(
+        DETECTOR_COUNT *
+        DETECTOR_COUNT
+    );
+
+// Separation-averaged normalized fluctuation correlations C(Δy).
+let separationValues =
+    new Float64Array(
+        DETECTOR_COUNT
+    );
+
+let fluctuationCorrelationValues =
+    new Array(
+        DETECTOR_COUNT
+    ).fill(null);
+
+let characteristicLength =
+    null;
+
+// Reused scratch storage: avoids per-frame typed-array allocations.
+const detectorPositionsScratch =
+    new Float64Array(
+        DETECTOR_COUNT
+    );
+
+const detectorIntensityScratch =
+    new Float64Array(
+        DETECTOR_COUNT
+    );
+
+const detectorMeanScratch =
+    new Float64Array(
+        DETECTOR_COUNT
+    );
+
+const detectorVarianceScratch =
+    new Float64Array(
+        DETECTOR_COUNT
+    );
+
+function pairIndex(i, j) {
+    return (
+        i * DETECTOR_COUNT +
+        j
+    );
+}
+
+function resetCorrelationMeasurement() {
+    correlationTime = 0;
+
+    integralI =
+        new Float64Array(
+            DETECTOR_COUNT
+        );
+
+    integralI2 =
+        new Float64Array(
+            DETECTOR_COUNT
+        );
+
+    integralPair =
+        new Float64Array(
+            DETECTOR_COUNT *
+            DETECTOR_COUNT
+        );
+
+    separationValues =
+        new Float64Array(
+            DETECTOR_COUNT
+        );
+
+    fluctuationCorrelationValues =
+        new Array(
+            DETECTOR_COUNT
+        ).fill(null);
+
+    characteristicLength =
+        null;
+
+    renderCorrelationPlot();
+}
+
+function getDetectorPositions() {
+
+    const usableHeight =
+        Math.max(
+            0,
+            Math.min(
+                detectorArrayHeight,
+                screenHeight
+            )
+        );
+
+    const spacing =
+        DETECTOR_COUNT > 1
+        ? usableHeight /
+          (
+              DETECTOR_COUNT - 1
+          )
+        : 0;
+
+    let i = 0;
+
+    for (
+        let k = -DETECTOR_SIDE_COUNT;
+        k <= DETECTOR_SIDE_COUNT;
+        k++
+    ) {
+        detectorPositionsScratch[i++] =
+            k * spacing;
+    }
+
+    return detectorPositionsScratch;
+}
+
+const directFieldScratch =
+    new Float64Array(2);
+
+
+function evaluateComplexFieldAtPoint(
+    x,
+    y,
+    currentTime,
+    packetWidth,
+    out
+) {
+
+    let real = 0;
+    let imag = 0;
+
+    const halfScreen =
+        screenHeight / 2;
+
+    const cutoff =
+        packetWidth *
+        ENVELOPE_CUTOFF_SIGMA;
+
+    const inverseWidth =
+        1 /
+        Math.max(
+            packetWidth,
+            1e-12
+        );
+
+    for (
+        const source of emitters
+    ) {
+
+        const dx =
+            x -
+            source.x;
+
+        if (
+            dx <= 0 ||
+            x >= screenX
+        ) {
+            continue;
+        }
+
+        const dy =
+            y -
+            source.y;
+
+        const sourceToScreen =
+            screenX -
+            source.x;
+
+        const yHit =
+            source.y +
+            dy *
+            sourceToScreen /
+            dx;
+
+        if (
+            yHit <
+            SCREEN_CENTER_Y -
+            halfScreen ||
+
+            yHit >
+            SCREEN_CENTER_Y +
+            halfScreen
+        ) {
+            continue;
+        }
+
+        const r =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
+
+        const decay =
+            Math.exp(
+                -DECAY_STRENGTH *
+                r
+            ) /
+            Math.sqrt(
+                1 +
+                Math.max(
+                    r,
+                    0.15
+                )
+            );
+
+        if (temporalCoherentMode) {
+
+            const wave =
+                getContinuousWaveForSource(
+                    source
+                );
+
+            if (!wave) continue;
+
+            const theta =
+                wave.k *
+                r -
+                wave.k *
+                WAVE_SPEED *
+                currentTime +
+                wave.phase;
+
+            const magnitude =
+                wave.amplitude *
+                decay;
+
+            real +=
+                magnitude *
+                Math.cos(
+                    theta
+                );
+
+            imag +=
+                magnitude *
+                Math.sin(
+                    theta
+                );
+
+        } else {
+
+            const packets =
+                getPacketsForSource(
+                    source
+                );
+
+            for (
+                let p = 0;
+                p < packets.length;
+                p++
+            ) {
+
+                const packet =
+                    packets[p];
+
+                const age =
+                    currentTime -
+                    packet.birth;
+
+                if (age < 0) {
+                    continue;
+                }
+
+                const radialOffset =
+                    r -
+                    WAVE_SPEED *
+                    age;
+
+                if (
+                    radialOffset <
+                    -cutoff ||
+
+                    radialOffset >
+                    cutoff
+                ) {
+                    continue;
+                }
+
+                const z =
+                    radialOffset *
+                    inverseWidth;
+
+                const envelope =
+                    Math.exp(
+                        -0.5 *
+                        z *
+                        z
+                    );
+
+                const theta =
+                    packet.k *
+                    radialOffset +
+                    packet.phase;
+
+                const magnitude =
+                    packet.amplitude *
+                    envelope *
+                    decay;
+
+                real +=
+                    magnitude *
+                    Math.cos(
+                        theta
+                    );
+
+                imag +=
+                    magnitude *
+                    Math.sin(
+                        theta
+                    );
+            }
+        }
+    }
+
+    out[0] = real;
+    out[1] = imag;
+
+    return out;
+}
+
+
+function sampleComplexFieldAtScreenY(
+    y,
+    currentTime,
+    packetWidth
+) {
+
+    const dxGrid =
+        (X_MAX - X_MIN) /
+        (SIM_W - 1);
+
+    const xSample =
+        Math.max(
+            X_MIN,
+            Math.min(
+                screenX -
+                0.55 *
+                dxGrid,
+                X_MAX
+            )
+        );
+
+    return evaluateComplexFieldAtPoint(
+        xSample,
+        y,
+        currentTime,
+        packetWidth,
+        directFieldScratch
+    );
+}
+
+function recomputeFluctuationCorrelations() {
+
+    const positions =
+        getDetectorPositions();
+
+    for (
+        let m = 0;
+        m < DETECTOR_COUNT;
+        m++
+    ) {
+        separationValues[m] =
+            Math.abs(
+                positions[m] -
+                positions[0]
+            );
+    }
+
+    fluctuationCorrelationValues =
+        new Array(
+            DETECTOR_COUNT
+        ).fill(null);
+
+    characteristicLength =
+        null;
+
+    if (
+        correlationTime <= 0
+    ) {
+        return;
+    }
+
+    const meanI =
+        detectorMeanScratch;
+
+    const varianceI =
+        detectorVarianceScratch;
+
+    for (
+        let i = 0;
+        i < DETECTOR_COUNT;
+        i++
+    ) {
+        meanI[i] =
+            integralI[i] /
+            correlationTime;
+
+        const meanI2 =
+            integralI2[i] /
+            correlationTime;
+
+        varianceI[i] =
+            meanI2 -
+            meanI[i] *
+            meanI[i];
+    }
+
+    for (
+        let m = 0;
+        m < DETECTOR_COUNT;
+        m++
+    ) {
+
+        let sumCorr = 0;
+        let count = 0;
+
+        for (
+            let i = 0;
+            i + m < DETECTOR_COUNT;
+            i++
+        ) {
+            const j = i + m;
+
+            const denom =
+                Math.sqrt(
+                    Math.max(
+                        varianceI[i],
+                        0
+                    ) *
+                    Math.max(
+                        varianceI[j],
+                        0
+                    )
+                );
+
+            if (denom <= 1e-18) {
+                continue;
+            }
+
+            const meanPair =
+                integralPair[
+                    pairIndex(i, j)
+                ] /
+                correlationTime;
+
+            const covariance =
+                meanPair -
+                meanI[i] *
+                meanI[j];
+
+            const corr =
+                covariance /
+                denom;
+
+            if (
+                Number.isFinite(
+                    corr
+                )
+            ) {
+                sumCorr += corr;
+                count++;
+            }
+        }
+
+        fluctuationCorrelationValues[m] =
+            count > 0
+            ? sumCorr / count
+            : null;
+    }
+
+    // Correlation length ξ defined by C(ξ) = 1/e.
+    const target =
+        1 / Math.E;
+
+    for (
+        let m = 1;
+        m < DETECTOR_COUNT;
+        m++
+    ) {
+        const prev =
+            fluctuationCorrelationValues[
+                m - 1
+            ];
+
+        const curr =
+            fluctuationCorrelationValues[
+                m
+            ];
+
+        if (
+            prev === null ||
+            curr === null ||
+            !Number.isFinite(prev) ||
+            !Number.isFinite(curr)
+        ) {
+            continue;
+        }
+
+        if (
+            prev >= target &&
+            curr <= target
+        ) {
+            const x0 =
+                separationValues[
+                    m - 1
+                ];
+
+            const x1 =
+                separationValues[
+                    m
+                ];
+
+            const fraction =
+                Math.abs(
+                    curr - prev
+                ) > 1e-18
+                ? (
+                    target - prev
+                ) / (
+                    curr - prev
+                )
+                : 0;
+
+            characteristicLength =
+                x0 +
+                fraction *
+                (
+                    x1 - x0
+                );
+
+            break;
+        }
+    }
+
+    // If the curve never falls below 1/e within the sampled range,
+    // keep ξ undefined rather than inventing a number.
+}
+
+function updateCorrelationMeasurement(
+    dt,
+    currentTime,
+    packetWidth
+) {
+    if (!(dt > 0)) return;
+
+    const positions =
+        getDetectorPositions();
+
+    const intensities =
+        detectorIntensityScratch;
+
+    for (
+        let i = 0;
+        i < DETECTOR_COUNT;
+        i++
+    ) {
+        const e =
+            sampleComplexFieldAtScreenY(
+                positions[i],
+                currentTime,
+                packetWidth
+            );
+
+        const real =
+            e[0];
+
+        const imag =
+            e[1];
+
+        intensities[i] =
+            real *
+            real +
+            imag *
+            imag;
+    }
+
+    correlationTime += dt;
+
+    for (
+        let i = 0;
+        i < DETECTOR_COUNT;
+        i++
+    ) {
+        const Ii =
+            intensities[i];
+
+        integralI[i] +=
+            Ii * dt;
+
+        integralI2[i] +=
+            Ii * Ii * dt;
+    }
+
+    for (
+        let i = 0;
+        i < DETECTOR_COUNT;
+        i++
+    ) {
+        for (
+            let j = i;
+            j < DETECTOR_COUNT;
+            j++
+        ) {
+            const value =
+                intensities[i] *
+                intensities[j] *
+                dt;
+
+            integralPair[
+                pairIndex(i, j)
+            ] += value;
+
+            if (j !== i) {
+                integralPair[
+                    pairIndex(j, i)
+                ] += value;
+            }
+        }
+    }
+
+    recomputeFluctuationCorrelations();
+}
+
+function renderCorrelationPlot() {
+    const w =
+        correlationCanvas.width;
+
+    const h =
+        correlationCanvas.height;
+
+    const left = 58;
+    const right = 18;
+    const top = 16;
+    const bottom = 42;
+
+    const plotW =
+        w - left - right;
+
+    const plotH =
+        h - top - bottom;
+
+    const yMin = -0.2;
+    const yMax = 1.0;
+
+    function mapX(x) {
+        const xMax =
+            separationValues[
+                DETECTOR_COUNT - 1
+            ] > 0
+            ? separationValues[
+                DETECTOR_COUNT - 1
+            ]
+            : 1;
+
+        return (
+            left +
+            plotW *
+            x / xMax
+        );
+    }
+
+    function mapY(y) {
+        const clipped =
+            Math.max(
+                yMin,
+                Math.min(
+                    yMax,
+                    y
+                )
+            );
+
+        return (
+            top +
+            plotH *
+            (
+                1 -
+                (
+                    clipped - yMin
+                ) / (
+                    yMax - yMin
+                )
+            )
+        );
+    }
+
+    correlationCtx.fillStyle =
+        "#ffffff";
+
+    correlationCtx.fillRect(
+        0,
+        0,
+        w,
+        h
+    );
+
+    // Horizontal grid lines
+    correlationCtx.strokeStyle =
+        "#dddddd";
+    correlationCtx.lineWidth = 1;
+
+    for (
+        const yTick of [-0.2, 0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    ) {
+        const py =
+            mapY(yTick);
+
+        correlationCtx.beginPath();
+        correlationCtx.moveTo(
+            left,
+            py
+        );
+        correlationCtx.lineTo(
+            left + plotW,
+            py
+        );
+        correlationCtx.stroke();
+    }
+
+    // Reference line at 1/e
+    {
+        const py =
+            mapY(
+                1 / Math.E
+            );
+
+        correlationCtx.save();
+        correlationCtx.setLineDash(
+            [6, 5]
+        );
+        correlationCtx.strokeStyle =
+            "#777777";
+        correlationCtx.beginPath();
+        correlationCtx.moveTo(
+            left,
+            py
+        );
+        correlationCtx.lineTo(
+            left + plotW,
+            py
+        );
+        correlationCtx.stroke();
+        correlationCtx.restore();
+
+        correlationCtx.fillStyle =
+            "#555555";
+        correlationCtx.font =
+            "11px system-ui";
+        correlationCtx.textAlign =
+            "left";
+        correlationCtx.textBaseline =
+            "bottom";
+        correlationCtx.fillText(
+            "1/e",
+            left + 6,
+            py - 3
+        );
+    }
+
+    // Axes
+    correlationCtx.strokeStyle =
+        "#222222";
+    correlationCtx.lineWidth = 1.25;
+    correlationCtx.beginPath();
+    correlationCtx.moveTo(
+        left,
+        top
+    );
+    correlationCtx.lineTo(
+        left,
+        top + plotH
+    );
+    correlationCtx.lineTo(
+        left + plotW,
+        top + plotH
+    );
+    correlationCtx.stroke();
+
+    // Data curve
+    const validPoints = [];
+
+    for (
+        let m = 0;
+        m < DETECTOR_COUNT;
+        m++
+    ) {
+        const y =
+            fluctuationCorrelationValues[m];
+
+        if (
+            y !== null &&
+            Number.isFinite(y)
+        ) {
+            validPoints.push({
+                x: separationValues[m],
+                y
+            });
+        }
+    }
+
+    if (
+        validPoints.length >= 2
+    ) {
+        correlationCtx.strokeStyle =
+            "#111111";
+        correlationCtx.lineWidth = 2;
+        correlationCtx.beginPath();
+
+        for (
+            let p = 0;
+            p < validPoints.length;
+            p++
+        ) {
+            const point =
+                validPoints[p];
+
+            const px =
+                mapX(point.x);
+
+            const py =
+                mapY(point.y);
+
+            if (p === 0) {
+                correlationCtx.moveTo(
+                    px,
+                    py
+                );
+            } else {
+                correlationCtx.lineTo(
+                    px,
+                    py
+                );
+            }
+        }
+
+        correlationCtx.stroke();
+    }
+
+    // Point markers
+    for (
+        const point of validPoints
+    ) {
+        const px =
+            mapX(point.x);
+
+        const py =
+            mapY(point.y);
+
+        correlationCtx.beginPath();
+        correlationCtx.arc(
+            px,
+            py,
+            3.5,
+            0,
+            2 * Math.PI
+        );
+        correlationCtx.fillStyle =
+            "#b35a5a";
+        correlationCtx.fill();
+        correlationCtx.strokeStyle =
+            "#222222";
+        correlationCtx.lineWidth = 1;
+        correlationCtx.stroke();
+    }
+
+    // Characteristic length marker
+    if (
+        characteristicLength !== null &&
+        Number.isFinite(
+            characteristicLength
+        )
+    ) {
+        const px =
+            mapX(
+                characteristicLength
+            );
+
+        correlationCtx.save();
+        correlationCtx.setLineDash(
+            [4, 4]
+        );
+        correlationCtx.strokeStyle =
+            "#444444";
+        correlationCtx.beginPath();
+        correlationCtx.moveTo(
+            px,
+            top
+        );
+        correlationCtx.lineTo(
+            px,
+            top + plotH
+        );
+        correlationCtx.stroke();
+        correlationCtx.restore();
+    }
+
+    // Y ticks
+    correlationCtx.fillStyle =
+        "#222222";
+    correlationCtx.font =
+        "12px system-ui";
+    correlationCtx.textBaseline =
+        "middle";
+    correlationCtx.textAlign =
+        "right";
+
+    for (
+        const yTick of [-0.2, 0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    ) {
+        correlationCtx.fillText(
+            yTick.toFixed(1),
+            left - 8,
+            mapY(yTick)
+        );
+    }
+
+    // X ticks
+    const xMax =
+        separationValues[
+            DETECTOR_COUNT - 1
+        ] > 0
+        ? separationValues[
+            DETECTOR_COUNT - 1
+        ]
+        : 1;
+
+    correlationCtx.textAlign =
+        "center";
+    correlationCtx.textBaseline =
+        "top";
+
+    for (
+        const fraction of [0, 0.25, 0.5, 0.75, 1]
+    ) {
+        const x =
+            xMax * fraction;
+        const px =
+            mapX(x);
+
+        correlationCtx.strokeStyle =
+            "#222222";
+        correlationCtx.lineWidth = 1;
+        correlationCtx.beginPath();
+        correlationCtx.moveTo(
+            px,
+            top + plotH
+        );
+        correlationCtx.lineTo(
+            px,
+            top + plotH + 5
+        );
+        correlationCtx.stroke();
+
+        correlationCtx.fillStyle =
+            "#222222";
+        correlationCtx.fillText(
+            x.toFixed(2),
+            px,
+            top + plotH + 7
+        );
+    }
+
+    // Labels
+    correlationCtx.save();
+    correlationCtx.translate(
+        16,
+        top + plotH / 2
+    );
+    correlationCtx.rotate(
+        -Math.PI / 2
+    );
+    correlationCtx.textAlign =
+        "center";
+    correlationCtx.textBaseline =
+        "middle";
+    correlationCtx.fillStyle =
+        "#222222";
+    correlationCtx.font =
+        "12px system-ui";
+    correlationCtx.fillText(
+        "C(Δy)",
+        0,
+        0
+    );
+    correlationCtx.restore();
+
+    correlationCtx.textAlign =
+        "center";
+    correlationCtx.textBaseline =
+        "bottom";
+    correlationCtx.font =
+        "12px system-ui";
+    correlationCtx.fillText(
+        "detector separation Δy",
+        left + plotW / 2,
+        h - 2
+    );
+
+    correlationCtx.textAlign =
+        "right";
+    correlationCtx.textBaseline =
+        "top";
+    correlationCtx.font =
+        "13px system-ui";
+
+    correlationCtx.fillText(
+        `measurement time = ${correlationTime.toFixed(1)} s`,
+        w - 12,
+        8
+    );
+
+    correlationCtx.fillText(
+        characteristicLength !== null &&
+        Number.isFinite(
+            characteristicLength
+        )
+        ? `ξ (1/e) = ${characteristicLength.toFixed(3)}`
+        : "ξ (1/e) = not resolved",
+        w - 12,
+        24
+    );
+}
+
+
+// ============================================================
+// SCREEN COLOUR STRIP
+// ============================================================
+// ============================================================
+// SCREEN COLOUR STRIP
+// ============================================================
+// ============================================================
+// SCREEN COLOUR STRIP
+// ============================================================
+
+// RGB samples pulled directly from the colours just in front of
+// the absorbing screen in the main field image.
+function clearScreenStrip() {
+    screenStripPixels.fill(0);
+
+    for (
+        let p = 3;
+        p < screenStripPixels.length;
+        p += 4
+    ) {
+        screenStripPixels[p] = 255;
+    }
+
+    screenStripCtx.putImageData(
+        screenStripImageData,
+        0,
+        0
+    );
+
+    intensityStripPixels.fill(0);
+
+    for (
+        let p = 3;
+        p < intensityStripPixels.length;
+        p += 4
+    ) {
+        intensityStripPixels[p] = 255;
+    }
+
+    intensityStripCtx.putImageData(
+        intensityStripImageData,
+        0,
+        0
+    );
+
+    screenIntensitySamples.fill(0);
+    intensityDisplayScale = 1;
+}
+
+function sampleScreenColours(
+    fieldScale,
+    currentTime,
+    packetWidth
+) {
+    const halfScreen =
+        screenHeight / 2;
+
+    const dxGrid =
+        (X_MAX - X_MIN) /
+        (SIM_W - 1);
+
+    const xSample =
+        Math.max(
+            X_MIN,
+            Math.min(
+                screenX -
+                0.55 * dxGrid,
+                X_MAX
+            )
+        );
+
+    const invScale =
+        1 /
+        Math.max(
+            fieldScale,
+            1e-12
+        );
+
+    let colourPixelIndex = 0;
+    let frameMaxIntensity = 0;
+
+    for (
+        let s = 0;
+        s < SCREEN_SAMPLES;
+        s++
+    ) {
+        const y =
+            SCREEN_CENTER_Y -
+            halfScreen +
+            screenHeight *
+            s /
+            (
+                SCREEN_SAMPLES -
+                1
+            );
+
+        const field =
+            evaluateComplexFieldAtPoint(
+                xSample,
+                y,
+                currentTime,
+                packetWidth,
+                directFieldScratch
+            );
+
+        const real =
+            field[0];
+
+        const imag =
+            field[1];
+
+        const intensity =
+            real * real +
+            imag * imag;
+
+        screenIntensitySamples[s] =
+            intensity;
+
+        if (intensity > frameMaxIntensity) {
+            frameMaxIntensity =
+                intensity;
+        }
+
+        let t =
+            real *
+            invScale;
+
+        if (t > 1) {
+            t = 1;
+        } else if (t < -1) {
+            t = -1;
+        }
+
+        if (t >= 0) {
+
+            const q =
+                Math.round(
+                    255 *
+                    (
+                        1 - t
+                    )
+                );
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = 255;
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = q;
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = q;
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = 255;
+
+        } else {
+
+            const q =
+                Math.round(
+                    255 *
+                    (
+                        1 + t
+                    )
+                );
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = q;
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = q;
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = 255;
+
+            screenStripPixels[
+                colourPixelIndex++
+            ] = 255;
+        }
+    }
+
+    screenStripCtx.putImageData(
+        screenStripImageData,
+        0,
+        0
+    );
+
+    // Adaptive grayscale exposure:
+    // - quick response when the screen gets brighter
+    // - slower decay when it dims
+    // - square-root tone mapping to preserve contrast
+    const targetScale =
+        Math.max(
+            frameMaxIntensity,
+            1e-8
+        );
+
+    if (targetScale > intensityDisplayScale) {
+        intensityDisplayScale +=
+            0.22 *
+            (
+                targetScale -
+                intensityDisplayScale
+            );
+    } else {
+        intensityDisplayScale +=
+            0.045 *
+            (
+                targetScale -
+                intensityDisplayScale
+            );
+    }
+
+    let intensityPixelIndex = 0;
+
+    for (
+        let s = 0;
+        s < SCREEN_SAMPLES;
+        s++
+    ) {
+        const normalized =
+            Math.min(
+                1,
+                screenIntensitySamples[s] /
+                Math.max(
+                    intensityDisplayScale,
+                    1e-12
+                )
+            );
+
+        const value =
+            Math.round(
+                255 *
+                Math.sqrt(
+                    normalized
+                )
+            );
+
+        intensityStripPixels[
+            intensityPixelIndex++
+        ] = value;
+
+        intensityStripPixels[
+            intensityPixelIndex++
+        ] = value;
+
+        intensityStripPixels[
+            intensityPixelIndex++
+        ] = value;
+
+        intensityStripPixels[
+            intensityPixelIndex++
+        ] = 255;
+    }
+
+    intensityStripCtx.putImageData(
+        intensityStripImageData,
+        0,
+        0
+    );
+}
+
+
+function drawDetectorMarkersAndLabels(
+    ctx,
+    canvasWidth,
+    stripTop,
+    stripHeight
+) {
+    const halfScreen =
+        screenHeight / 2;
+
+    const detectorPositions =
+        getDetectorPositions();
+
+    for (
+        let i = 0;
+        i < detectorPositions.length;
+        i++
+    ) {
+        const detectorY =
+            detectorPositions[i];
+
+        const fraction =
+            (detectorY + halfScreen) /
+            Math.max(
+                screenHeight,
+                1e-12
+            );
+
+        const x =
+            Math.max(
+                0,
+                Math.min(
+                    canvasWidth,
+                    fraction * canvasWidth
+                )
+            );
+
+        const y =
+            stripTop +
+            stripHeight / 2;
+
+        ctx.beginPath();
+        ctx.arc(
+            x,
+            y,
+            i === DETECTOR_SIDE_COUNT
+                ? 5.2
+                : 4.2,
+            0,
+            2 * Math.PI
+        );
+
+        ctx.fillStyle =
+            "#000000";
+        ctx.fill();
+
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle =
+            "#ffffff";
+        ctx.stroke();
+    }
+
+    ctx.fillStyle =
+        "#bbb";
+    ctx.font =
+        "12px system-ui";
+    ctx.textBaseline =
+        "top";
+
+    const labels = [
+        {
+            x: 0,
+            align: "left",
+            text:
+                `${(-halfScreen).toFixed(1)}`
+        },
+        {
+            x: canvasWidth / 2,
+            align: "center",
+            text: "0"
+        },
+        {
+            x: canvasWidth,
+            align: "right",
+            text:
+                `+${halfScreen.toFixed(1)}`
+        }
+    ];
+
+    for (
+        const item of labels
+    ) {
+        ctx.textAlign =
+            item.align;
+
+        ctx.fillText(
+            item.text,
+            item.x,
+            61
+        );
+    }
+}
+
+function renderScreenImage() {
+    const w =
+        screenCanvas.width;
+
+    const h =
+        screenCanvas.height;
+
+    screenCtx.fillStyle =
+        "#090909";
+
+    screenCtx.fillRect(
+        0,
+        0,
+        w,
+        h
+    );
+
+    const stripTop = 8;
+    const stripBottom = 54;
+    const stripHeight =
+        stripBottom -
+        stripTop;
+
+    screenCtx.imageSmoothingEnabled =
+        false;
+
+    screenCtx.drawImage(
+        screenStripCanvas,
+        0,
+        0,
+        SCREEN_SAMPLES,
+        1,
+        0,
+        stripTop,
+        w,
+        stripHeight
+    );
+
+    screenCtx.strokeStyle =
+        "rgba(255,255,255,0.5)";
+    screenCtx.lineWidth = 1;
+
+    screenCtx.strokeRect(
+        0.5,
+        stripTop + 0.5,
+        w - 1,
+        stripHeight - 1
+    );
+
+    drawDetectorMarkersAndLabels(
+        screenCtx,
+        w,
+        stripTop,
+        stripHeight
+    );
+}
+
+function renderIntensityImage() {
+    const w =
+        intensityCanvas.width;
+
+    const h =
+        intensityCanvas.height;
+
+    intensityCtx.fillStyle =
+        "#090909";
+
+    intensityCtx.fillRect(
+        0,
+        0,
+        w,
+        h
+    );
+
+    const stripTop = 8;
+    const stripBottom = 54;
+    const stripHeight =
+        stripBottom -
+        stripTop;
+
+    intensityCtx.imageSmoothingEnabled =
+        false;
+
+    intensityCtx.drawImage(
+        intensityStripCanvas,
+        0,
+        0,
+        SCREEN_SAMPLES,
+        1,
+        0,
+        stripTop,
+        w,
+        stripHeight
+    );
+
+    intensityCtx.strokeStyle =
+        "rgba(255,255,255,0.5)";
+    intensityCtx.lineWidth = 1;
+
+    intensityCtx.strokeRect(
+        0.5,
+        stripTop + 0.5,
+        w - 1,
+        stripHeight - 1
+    );
+
+    drawDetectorMarkersAndLabels(
+        intensityCtx,
+        w,
+        stripTop,
+        stripHeight
+    );
+}
+
+
+// ============================================================
+// COLOUR MAP
+// ============================================================
+
+
+
+// ============================================================
+// COORDINATE HELPERS
+// ============================================================
+
+function simToCanvasX(x) {
+    return (
+        x - X_MIN
+    ) /
+    (
+        X_MAX - X_MIN
+    ) *
+    displayCanvas.width;
+}
+
+
+function simToCanvasY(y) {
+    return (
+        Y_MAX - y
+    ) /
+    (
+        Y_MAX - Y_MIN
+    ) *
+    displayCanvas.height;
+}
+
+
+// ============================================================
+// RENDERING
+// ============================================================
+
+function renderField(
+    fieldScale
+) {
+
+    const w =
+        displayCanvas.width;
+
+    const h =
+        displayCanvas.height;
+
+    displayCtx.clearRect(
+        0,
+        0,
+        w,
+        h
+    );
+
+    const renderedOnGPU =
+        renderGPUField(
+            simulationTime,
+            fieldScale,
+            packetWidth
+        );
+
+    if (renderedOnGPU) {
+
+        displayCtx.imageSmoothingEnabled =
+            true;
+
+        displayCtx.drawImage(
+            gpuCanvas,
+            0,
+            0,
+            w,
+            h
+        );
+
+    } else {
+
+        // CPU fallback preserves correctness on browsers without WebGL2.
+        calculateTotalField(
+            simulationTime,
+            packetWidth
+        );
+
+        let p = 0;
+
+        const invScale =
+            1 /
+            Math.max(
+                fieldScale,
+                1e-12
+            );
+
+        for (
+            let i = 0;
+            i < totalFieldReal.length;
+            i++
+        ) {
+
+            let t =
+                totalFieldReal[i] *
+                invScale;
+
+            if (t > 1) {
+                t = 1;
+            } else if (t < -1) {
+                t = -1;
+            }
+
+            if (t >= 0) {
+
+                const q =
+                    Math.round(
+                        255 *
+                        (
+                            1 - t
+                        )
+                    );
+
+                pixels[p++] = 255;
+                pixels[p++] = q;
+                pixels[p++] = q;
+                pixels[p++] = 255;
+
+            } else {
+
+                const q =
+                    Math.round(
+                        255 *
+                        (
+                            1 + t
+                        )
+                    );
+
+                pixels[p++] = q;
+                pixels[p++] = q;
+                pixels[p++] = 255;
+                pixels[p++] = 255;
+            }
+        }
+
+        simCtx.putImageData(
+            imageData,
+            0,
+            0
+        );
+
+        displayCtx.drawImage(
+            simCanvas,
+            0,
+            0,
+            w,
+            h
+        );
+    }
+
+    displayCtx.drawImage(
+        overlayCanvas,
+        0,
+        0
+    );
+}
+
+
+// ============================================================
+// GEOMETRY OVERLAY
+// ============================================================
+
+function drawGeometryOverlay(ctx) {
+
+    const w =
+        displayCanvas.width;
+
+    const h =
+        displayCanvas.height;
+
+    const sx =
+        simToCanvasX(
+            screenX
+        );
+
+    ctx.save();
+
+
+    // Shade everything beyond the absorber.
+    if (sx < w) {
+
+        ctx.fillStyle =
+            "rgba(35,35,35,0.16)";
+
+        ctx.fillRect(
+            sx,
+            0,
+            w - sx,
+            h
+        );
+    }
+
+
+    const halfScreen =
+        screenHeight / 2;
+
+    const yTop =
+        simToCanvasY(
+            SCREEN_CENTER_Y +
+            halfScreen
+        );
+
+    const yBottom =
+        simToCanvasY(
+            SCREEN_CENTER_Y -
+            halfScreen
+        );
+
+
+    // Absorbing screen
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = "#111";
+
+    ctx.beginPath();
+    ctx.moveTo(
+        sx,
+        yTop
+    );
+
+    ctx.lineTo(
+        sx,
+        yBottom
+    );
+
+    ctx.stroke();
+
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#fff";
+
+    ctx.beginPath();
+    ctx.moveTo(
+        sx,
+        yTop
+    );
+
+    ctx.lineTo(
+        sx,
+        yBottom
+    );
+
+    ctx.stroke();
+
+
+    /*
+        To avoid visual clutter with 10 emitters, show cone
+        guides only for the first and last emitter.
+        The actual hit-screen filtering is applied independently
+        to every emitter.
+    */
+
+    if (
+        emitters.length > 0
+    ) {
+
+        const guides =
+            emitters.length === 1
+            ? [emitters[0]]
+            : [
+                emitters[0],
+                emitters[
+                    emitters.length - 1
+                ]
+            ];
+
+        ctx.setLineDash(
+            [7, 6]
+        );
+
+        ctx.lineWidth =
+            1.1;
+
+        ctx.strokeStyle =
+            "rgba(20,20,20,0.42)";
+
+
+        for (
+            const source of guides
+        ) {
+
+            const x0 =
+                simToCanvasX(
+                    source.x
+                );
+
+            const y0 =
+                simToCanvasY(
+                    source.y
+                );
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                x0,
+                y0
+            );
+
+            ctx.lineTo(
+                sx,
+                yTop
+            );
+
+            ctx.moveTo(
+                x0,
+                y0
+            );
+
+            ctx.lineTo(
+                sx,
+                yBottom
+            );
+
+            ctx.stroke();
+        }
+
+        ctx.setLineDash(
+            []
+        );
+    }
+
+
+    // Source markers
+    for (
+        let i = 0;
+        i < emitters.length;
+        i++
+    ) {
+        drawSourceMarker(
+            emitters[i],
+            i,
+            ctx
+        );
+    }
+
+
+    // R marker
+    const yR =
+        simToCanvasY(
+            8.8
+        );
+
+    const xSource =
+        simToCanvasX(
+            SOURCE_X
+        );
+
+
+    ctx.strokeStyle =
+        "rgba(0,0,0,0.7)";
+
+    ctx.lineWidth =
+        1.5;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        xSource,
+        yR
+    );
+
+    ctx.lineTo(
+        sx,
+        yR
+    );
+
+    ctx.stroke();
+
+
+    ctx.fillStyle =
+        "#111";
+
+    ctx.font =
+        "15px system-ui";
+
+    ctx.textAlign =
+        "center";
+
+    ctx.textBaseline =
+        "bottom";
+
+    ctx.fillText(
+        `R = ${screenDistance.toFixed(1)}`,
+        (
+            xSource +
+            sx
+        ) / 2,
+        yR - 4
+    );
+
+
+    ctx.textAlign =
+        "left";
+
+    ctx.textBaseline =
+        "top";
+
+    ctx.fillText(
+        "absorbing screen",
+        Math.min(
+            sx + 8,
+            w - 125
+        ),
+        12
+    );
+
+
+    ctx.restore();
+}
+
+
+function drawSourceMarker(
+    source,
+    index,
+    ctx
+) {
+
+    const cx =
+        simToCanvasX(
+            source.x
+        );
+
+    const cy =
+        simToCanvasY(
+            source.y
+        );
+
+    const scale =
+        displayCanvas.width /
+        840;
+
+    const radius =
+        Math.max(
+            4,
+            6.5 * scale
+        );
+
+
+    ctx.save();
+
+    ctx.beginPath();
+
+    ctx.arc(
+        cx,
+        cy,
+        radius,
+        0,
+        2 * Math.PI
+    );
+
+    ctx.fillStyle =
+        "black";
+
+    ctx.fill();
+
+
+    ctx.lineWidth =
+        Math.max(
+            1,
+            1.5 * scale
+        );
+
+    ctx.strokeStyle =
+        "white";
+
+    ctx.stroke();
+
+
+    // Labels stay compact when many emitters are present.
+    ctx.fillStyle =
+        "#111";
+
+    ctx.font =
+        `${Math.max(9, 11 * scale)}px system-ui`;
+
+    ctx.textAlign =
+        "right";
+
+    ctx.textBaseline =
+        "middle";
+
+    ctx.fillText(
+        `${index + 1}`,
+        cx - radius - 4,
+        cy
+    );
+
+
+    ctx.restore();
+}
+
+
+function rebuildGeometryOverlay() {
+
+    overlayCtx.clearRect(
+        0,
+        0,
+        overlayCanvas.width,
+        overlayCanvas.height
+    );
+
+    drawGeometryOverlay(
+        overlayCtx
+    );
+}
+
+
+// ============================================================
+// UI STATE
+// ============================================================
+
+let packetWidth =
+    Number(
+        ui.packetWidth.value
+    );
+
+let fieldScale =
+    Number(
+        ui.fieldScale.value
+    );
+
+
+function updateLabels() {
+
+    ui.countValue.textContent =
+        `${ui.emitterCount.value}`;
+
+    ui.coherenceValue.textContent =
+        ui.coherentMode.checked
+        ? "Coherent"
+        : "Incoherent";
+
+    ui.temporalCoherenceValue.textContent =
+        ui.temporalCoherentMode.checked
+        ? "Coherent sine wave"
+        : "Incoherent packets";
+
+    ui.rValue.textContent =
+        Number(
+            ui.screenDistance.value
+        ).toFixed(1);
+
+    ui.screenHeightValue.textContent =
+        Number(
+            ui.screenHeight.value
+        ).toFixed(1);
+
+    ui.sourceHeightValue.textContent =
+        Number(
+            ui.sourceArrayHeight.value
+        ).toFixed(1);
+
+    ui.detectorHeightValue.textContent =
+        Number(
+            ui.detectorArrayHeight.value
+        ).toFixed(2);
+
+    ui.tempValue.textContent =
+        `${ui.temperature.value} K`;
+
+    ui.rateValue.textContent =
+        `${ui.rate.value}/s`;
+
+    ui.widthValue.textContent =
+        Number(
+            ui.packetWidth.value
+        ).toFixed(2);
+
+    ui.scaleValue.textContent =
+        Number(
+            ui.fieldScale.value
+        ).toFixed(1);
+}
+
+
+function updateScreenGeometry() {
+
+    screenDistance =
+        Number(
+            ui.screenDistance.value
+        );
+
+    screenHeight =
+        Number(
+            ui.screenHeight.value
+        );
+
+    ui.sourceArrayHeight.max =
+        MAX_SOURCE_ARRAY_HEIGHT.toFixed(2);
+
+    sourceArrayHeight =
+        Math.max(
+            0,
+            Math.min(
+                Number(
+                    ui.sourceArrayHeight.value
+                ),
+                MAX_SOURCE_ARRAY_HEIGHT
+            )
+        );
+
+    // The detectors live on the finite absorbing screen, so their
+    // total span is independently adjustable but cannot exceed it.
+    ui.detectorArrayHeight.max =
+        screenHeight.toFixed(2);
+
+    if (
+        Number(
+            ui.detectorArrayHeight.value
+        ) >
+        screenHeight
+    ) {
+        ui.detectorArrayHeight.value =
+            screenHeight.toFixed(2);
+    }
+
+    detectorArrayHeight =
+        Math.max(
+            0,
+            Number(
+                ui.detectorArrayHeight.value
+            )
+        );
+
+    screenX =
+        SOURCE_X +
+        screenDistance;
+
+    screenX =
+        Math.min(
+            screenX,
+            X_MAX - 0.2
+        );
+}
+
+
+function applyNonCountUI() {
+
+    updateLabels();
+
+    updateScreenGeometry();
+
+    coherentMode =
+        ui.coherentMode.checked;
+
+    temporalCoherentMode =
+        ui.temporalCoherentMode.checked;
+
+    const requestedTemperature =
+        Number(
+            ui.temperature.value
+        );
+
+    const rate =
+        Number(
+            ui.rate.value
+        );
+
+    packetWidth =
+        Number(
+            ui.packetWidth.value
+        );
+
+    fieldScale =
+        Number(
+            ui.fieldScale.value
+        );
+
+
+    const temperatureChanged =
+        requestedTemperature !==
+        currentTemperature;
+
+
+    let sharedCDF = null;
+
+    if (temperatureChanged) {
+
+        currentTemperature =
+            requestedTemperature;
+
+        sharedCDF =
+            makeBlackbodyCDF(
+                requestedTemperature
+            );
+    }
+
+
+    /*
+        Screen geometry alters the allowed ray masks, while the
+        source-array height independently controls emitter positions.
+        Preserve packet histories if the emitter count itself has not changed.
+    */
+
+    const oldCount =
+        emitters.length;
+
+    const requestedCount =
+        Number(
+            ui.emitterCount.value
+        );
+
+
+    if (
+        oldCount !==
+        requestedCount
+    ) {
+        rebuildEmitters(false);
+        return;
+    }
+
+
+    const sourceSpan =
+        Math.max(
+            0,
+            Math.min(
+                sourceArrayHeight,
+                MAX_SOURCE_ARRAY_HEIGHT
+            )
+        );
+
+
+    for (
+        let i = 0;
+        i < emitters.length;
+        i++
+    ) {
+
+        const source =
+            emitters[i];
+
+        let y = 0;
+
+        if (
+            emitters.length > 1
+        ) {
+            y =
+                -sourceSpan / 2 +
+                sourceSpan *
+                i /
+                (
+                    emitters.length -
+                    1
+                );
+        }
+
+
+        source.x =
+            SOURCE_X;
+
+        source.y =
+            y;
+
+        source.emissionRate =
+            rate;
+
+
+        if (
+            temperatureChanged
+        ) {
+            source.setCDF(
+                requestedTemperature,
+                sharedCDF
+            );
+        }
+
+        source.updateGeometry();
+    }
+
+    if (temperatureChanged) {
+        rebuildContinuousWaves();
+    } else {
+        rebuildContinuousSpatialCaches();
+    }
+
+    rebuildGeometryOverlay();
+}
+
+
+// Count change gets its own handler because source locations
+// change and we deliberately reset stochastic packet histories.
+ui.emitterCount.addEventListener(
+    "input",
+    () => {
+
+        updateLabels();
+
+        updateScreenGeometry();
+
+        rebuildEmitters(false);
+
+        sharedPackets = [];
+        clearTotalField();
+        clearScreenStrip();
+        resetCorrelationMeasurement();
+    }
+);
+
+
+ui.sourceArrayHeight.addEventListener(
+    "input",
+    () => {
+        applyNonCountUI();
+        resetCorrelationMeasurement();
+    }
+);
+
+
+ui.detectorArrayHeight.addEventListener(
+    "input",
+    () => {
+        detectorArrayHeight =
+            Number(
+                ui.detectorArrayHeight.value
+            );
+
+        updateLabels();
+        resetCorrelationMeasurement();
+        renderScreenImage();
+        renderIntensityImage();
+        renderCorrelationPlot();
+    }
+);
+
+ui.coherentMode.addEventListener(
+    "input",
+    () => {
+        coherentMode =
+            ui.coherentMode.checked;
+
+        for (
+            const source of emitters
+        ) {
+            source.clear();
+        }
+
+        sharedPackets = [];
+        rebuildContinuousWaves();
+
+        clearTotalField();
+        clearScreenStrip();
+        resetCorrelationMeasurement();
+        updateLabels();
+    }
+);
+
+ui.temporalCoherentMode.addEventListener(
+    "input",
+    () => {
+
+        temporalCoherentMode =
+            ui.temporalCoherentMode.checked;
+
+        // Switching temporal model starts a fresh measurement.
+        for (
+            const source of emitters
+        ) {
+            source.clear();
+        }
+
+        sharedPackets = [];
+        rebuildContinuousWaves();
+
+        clearTotalField();
+        clearScreenStrip();
+        resetCorrelationMeasurement();
+        updateLabels();
+    }
+);
+
+
+[
+    ui.screenDistance,
+    ui.screenHeight,
+    ui.temperature,
+    ui.rate,
+    ui.packetWidth
+].forEach(
+    element => {
+
+        element.addEventListener(
+            "input",
+            () => {
+                applyNonCountUI();
+                resetCorrelationMeasurement();
+            }
+        );
+    }
+);
+
+ui.fieldScale.addEventListener(
+    "input",
+    () => {
+        fieldScale =
+            Number(
+                ui.fieldScale.value
+            );
+        updateLabels();
+    }
+);
+
+
+// ============================================================
+// ANIMATION STATE
+// ============================================================
+
+let paused = false;
+
+let simulationTime = 0;
+
+let previousTimestamp =
+    performance.now();
+
+let fpsSmoothed = 0;
+
+let lastStatsUpdateTimestamp = -Infinity;
+const STATS_UPDATE_INTERVAL_MS = 250;
+
+
+ui.pause.addEventListener(
+    "click",
+    () => {
+
+        paused = !paused;
+
+        ui.pause.textContent =
+            paused
+            ? "Resume"
+            : "Pause";
+
+        previousTimestamp =
+            performance.now();
+    }
+);
+
+
+ui.reset.addEventListener(
+    "click",
+    () => {
+
+        for (
+            const source of emitters
+        ) {
+            source.clear();
+        }
+
+        sharedPackets = [];
+        rebuildContinuousWaves();
+
+        simulationTime = 0;
+
+        clearTotalField();
+        clearScreenStrip();
+        resetCorrelationMeasurement();
+
+        renderField(
+            fieldScale
+        );
+
+        renderScreenImage();
+    }
+);
+
+
+// ============================================================
+// MAIN LOOP
+// ============================================================
+
+function frame(timestamp) {
+
+    let realDt =
+        (
+            timestamp -
+            previousTimestamp
+        ) /
+        1000;
+
+    previousTimestamp =
+        timestamp;
+
+
+    if (
+        !Number.isFinite(
+            realDt
+        )
+    ) {
+        realDt = 0;
+    }
+
+
+    realDt =
+        Math.min(
+            Math.max(
+                realDt,
+                0
+            ),
+            MAX_DT
+        );
+
+
+    if (!paused) {
+
+        simulationTime +=
+            realDt;
+
+
+        if (!temporalCoherentMode) {
+
+            if (
+                coherentMode &&
+                emitters.length > 0
+            ) {
+                emitSharedPackets(
+                    emitters[0].cdf,
+                    emitters[0].emissionRate,
+                    simulationTime,
+                    realDt
+                );
+
+                removeOldSharedPackets(
+                    simulationTime,
+                    packetWidth
+                );
+
+            } else {
+
+                for (
+                    const source of emitters
+                ) {
+                    source.updateEmission(
+                        simulationTime,
+                        realDt
+                    );
+
+                    source.removeOldPackets(
+                        simulationTime,
+                        packetWidth
+                    );
+                }
+            }
+        }
+
+
+        updateCorrelationMeasurement(
+            realDt,
+            simulationTime,
+            packetWidth
+        );
+
+        sampleScreenColours(
+            fieldScale,
+            simulationTime,
+            packetWidth
+        );
+
+
+        renderField(
+            fieldScale
+        );
+
+        renderScreenImage();
+        renderIntensityImage();
+        renderCorrelationPlot();
+    }
+
+
+    const instantFps =
+        realDt > 0
+        ? 1 / realDt
+        : 0;
+
+
+    if (
+        instantFps > 0 &&
+        Number.isFinite(
+            instantFps
+        )
+    ) {
+
+        fpsSmoothed =
+            fpsSmoothed === 0
+            ? instantFps
+            : (
+                0.9 *
+                fpsSmoothed +
+                0.1 *
+                instantFps
+            );
+    }
+
+
+    if (
+        timestamp -
+        lastStatsUpdateTimestamp >=
+        STATS_UPDATE_INTERVAL_MS
+    ) {
+        lastStatsUpdateTimestamp =
+            timestamp;
+
+        const fullPixels =
+            SIM_W *
+            SIM_H;
+
+
+        let activePixelSum = 0;
+        let totalPackets = 0;
+
+        for (
+            const source of emitters
+        ) {
+            activePixelSum +=
+                source.activeIndices.length;
+
+            if (!coherentMode) {
+                totalPackets +=
+                    source.packets.length;
+            }
+        }
+
+        if (coherentMode) {
+            totalPackets =
+                sharedPackets.length;
+        }
+
+
+        const avgActivePixels =
+            emitters.length > 0
+            ? activePixelSum /
+              emitters.length
+            : 0;
+
+
+        const averageSkipped =
+            100 *
+            (
+                1 -
+                avgActivePixels /
+                fullPixels
+            );
+
+
+        ui.stats.innerHTML =
+            `Emitters: ${emitters.length}<br>` +
+            `Spatial coherence: ${coherentMode ? "coherent" : "incoherent"}<br>` +
+            `Temporal coherence: ${temporalCoherentMode ? "coherent sine wave" : "incoherent packets"}<br>` +
+            `Source array height: ${sourceArrayHeight.toFixed(2)}<br>` +
+            `Detector array height: ${detectorArrayHeight.toFixed(2)}<br>` +
+            `Detector spacing: ${(detectorArrayHeight / Math.max(DETECTOR_COUNT - 1, 1)).toFixed(3)}<br>` +
+            `Detectors: ${DETECTOR_COUNT} (centre + ${DETECTOR_SIDE_COUNT} each side)<br>` +
+            `Intensity model: |E|² from complex field<br>` +
+            `Correlation time: ${correlationTime.toFixed(2)} s<br>` +
+            `Characteristic length ξ: ${characteristicLength !== null && Number.isFinite(characteristicLength) ? characteristicLength.toFixed(4) : "not resolved"}<br>` +
+            `${temporalCoherentMode ? "Continuous-wave mode" : `Active packet stream size: ${totalPackets}`}<br>` +
+            `Screen x: ${screenX.toFixed(2)}<br>` +
+            `Average active pixels / emitter: ` +
+            `${Math.round(avgActivePixels).toLocaleString()}<br>` +
+            `Average grid skipped / emitter: ` +
+            `${averageSkipped.toFixed(0)}%<br>` +
+            `Grid: ${SIM_W} × ${SIM_H}<br>` +
+            `Renderer: ${gpuAvailable ? "WebGL2 GPU" : "CPU fallback"}<br>` +
+        `Approx. FPS: ${fpsSmoothed.toFixed(0)}`;
+    }
+
+
+    requestAnimationFrame(
+        frame
+    );
+}
+
+
+// ============================================================
+// START
+// ============================================================
+
+updateLabels();
+updateScreenGeometry();
+coherentMode =
+    ui.coherentMode.checked;
+
+temporalCoherentMode =
+    ui.temporalCoherentMode.checked;
+
+sourceArrayHeight =
+    Number(
+        ui.sourceArrayHeight.value
+    );
+
+detectorArrayHeight =
+    Number(
+        ui.detectorArrayHeight.value
+    );
+
+rebuildEmitters(false);
+clearScreenStrip();
+resetCorrelationMeasurement();
+
+renderField(
+    fieldScale
+);
+
+renderScreenImage();
+renderIntensityImage();
+renderCorrelationPlot();
+
+requestAnimationFrame(
+    frame
+);
+
+</script>
+</body>
+</html>
